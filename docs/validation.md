@@ -41,3 +41,29 @@ conexión SQLAlchemy; las comprobaciones de Compose y navegador usan PostgreSQL 
 
 No hay autenticación de BEC Guard, modelos SQL del dominio, motor BEC, scoring,
 integraciones LLM, recepción real de correos, workflows ni dashboards implementados.
+
+## Minifase de consolidación entre Fase 1 y Fase 2
+
+Se separaron en la documentación `AlertStatus` y `AlertVerdict`, conservando
+`verdict = null` antes de una decisión humana, y se confirmó exactamente un rol
+por usuario en el MVP. Las transiciones y permisos siguen pendientes de Fase 2.
+La revisión de arquitectura y contratos no encontró referencias inconsistentes.
+
+Se añadió `.github/workflows/ci.yml` con dos jobs independientes para pushes y
+pull requests a `main`, sin secretos ni servicios de base de datos.
+
+| Validación local de la minifase | Resultado |
+| --- | --- |
+| `uv sync --frozen` | Dependencias instaladas según el lockfile, sin modificarlo. |
+| `uv run pytest` | 3 pruebas aprobadas, sin advertencias. |
+| `uv run ruff check .` y `uv run ruff format --check .` | Aprobados. |
+| `npm ci` | Instalación desde el lockfile, sin modificarlo. |
+| `npm run lint`, `npm run format:check` y `npm run build` | Aprobados. |
+| `actionlint` 1.7.12 | Workflow válido, sin errores. Herramienta temporal en `/tmp`. |
+| Consistencia y alcance | AlertStatus contiene solo OPEN, UNDER_REVIEW y CLOSED; AlertVerdict contiene CONFIRMED_BEC y FALSE_POSITIVE. Sin cambios en aplicaciones ni infraestructura. |
+
+La validación local usó Python 3.14 y Node.js 26, compatible con `package.json`;
+CI selecciona Python 3.14 y Node.js 24. Se reutilizaron cachés locales en `/tmp`.
+TestClient se ejecutó fuera del sandbox por la limitación ya documentada.
+No se levantó Compose porque la infraestructura no cambió. No se ejecutó el
+workflow en GitHub: esta minifase no incluye push remoto. Fase 2 no se implementó.

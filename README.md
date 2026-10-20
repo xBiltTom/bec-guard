@@ -9,6 +9,10 @@ evaluación de riesgo, revisión humana y auditoría.
 infraestructura local y una pantalla que comprueba la salud de FastAPI y PostgreSQL.
 Todavía no se analizan correos ni se generan alertas.
 
+La minifase de consolidación separa conceptualmente el estado operativo de la
+alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
+exactamente un rol por usuario en el MVP. Fase 2 todavía no está implementada.
+
 ## Arquitectura y stack
 
 React + TypeScript + Vite consume FastAPI mediante REST. FastAPI concentra la lógica
@@ -155,6 +159,15 @@ npm run build
 El build verifica TypeScript y genera `dist/`. No se añade un framework de pruebas
 del frontend en esta fase. Usa `npm run format` y `uv run ruff format .` para aplicar
 el formato de cada aplicación.
+
+### Integración continua
+
+El workflow [CI](.github/workflows/ci.yml) se ejecuta en pushes a `main` y pull
+requests hacia `main`. Usa dos jobs independientes en Ubuntu: backend con Python
+3.14 y uv 0.13.4, y frontend con Node.js 24. Instala desde los lockfiles y ejecuta
+las mismas pruebas, linting, comprobaciones de formato y build descritos arriba.
+Reutiliza las cachés de uv y npm; no necesita secretos, `.env`, PostgreSQL ni
+Docker Compose. No realiza despliegues.
 
 ## Desarrollo de aplicaciones en el host
 

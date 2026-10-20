@@ -8,16 +8,16 @@ las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC
 
 | Concepto | Definición y datos previstos |
 | --- | --- |
-| User | Persona que accede al sistema: identificador, nombre, correo y rol. La estrategia de autenticación queda pendiente. |
-| Role | Responsabilidad de un usuario. Para el alcance inicial se prevé un rol por usuario; la autorización aún no existe. |
+| User | Persona que accede al sistema: identificador, nombre, correo y exactamente un rol en el MVP. La estrategia de autenticación queda pendiente. |
+| Role | Responsabilidad de un usuario. Cada usuario tiene un único rol; la autorización aún no existe. |
 | ExecutiveContact | Ejecutivo conocido: identificador, nombre, cargo, correos y dominios legítimos. Aporta contexto para reconocer suplantaciones. |
 | Vendor | Proveedor conocido: identificador, razón social, contactos y dominios legítimos. El tratamiento de cuentas bancarias se definirá cuando se implemente su gestión. |
 | Email | Correo normalizado para análisis: identificador, remitente, destinatarios, asunto, texto y fecha de recepción. Su parser y mecanismo de ingestión son futuros. |
 | EmailAnalysis | Ejecución de análisis de un Email: identificador, referencia al correo, fecha, versión del analizador y resultado neutral `BECAnalysisResult`. Un correo podrá tener varios análisis. |
-| BECAlert | Caso para revisión humana asociado a un análisis: identificador, estado, responsable opcional y fechas. Su creación dependerá de una política futura, no de todo análisis automáticamente. |
+| BECAlert | Caso para revisión humana asociado a un análisis: identificador, estado operativo `status` (AlertStatus), veredicto humano `verdict` (AlertVerdict o `null`), responsable opcional y fechas. Su creación dependerá de una política futura, no de todo análisis automáticamente. |
 | AuditLog | Registro de una acción relevante: identificador, actor humano o sistema, acción, recurso afectado y fecha. No debe copiar secretos ni cuerpos completos de correos. |
 
-Relaciones principales: User tiene Role; Email tiene EmailAnalysis; BECAlert
+Relaciones principales: User tiene exactamente un Role; Email tiene EmailAnalysis; BECAlert
 referencia EmailAnalysis y opcionalmente User como responsable; AuditLog permite
 rastrear acciones sobre estos recursos. ExecutiveContact y Vendor aportan contexto
 al análisis, sin exigir que todo remitente esté previamente registrado.
@@ -34,16 +34,39 @@ al motor y se versionará para conservar trazabilidad.
 
 ### AlertStatus
 
+Representa únicamente el ciclo de vida operativo de la alerta.
+
 | Valor | Significado |
 | --- | --- |
-| OPEN | Alerta creada, pendiente de revisión. |
-| UNDER_REVIEW | Un analista está evaluando el caso. |
+| OPEN | Alerta creada y todavía no revisada. |
+| UNDER_REVIEW | Un analista está revisándola. |
+| CLOSED | La alerta ya no requiere trabajo activo. |
+
+### AlertVerdict
+
+Representa el resultado de la revisión humana, independiente del estado operativo.
+
+| Valor | Significado |
+| --- | --- |
 | CONFIRMED_BEC | La revisión humana confirma fraude BEC. |
 | FALSE_POSITIVE | La revisión humana descarta el fraude. |
-| CLOSED | Caso cerrado administrativamente. |
 
-El cierre no debe borrar el resultado de la revisión ni su auditoría. La matriz
-de transiciones y sus permisos quedan pendientes; no hay máquina de estados aún.
+Mientras no exista una decisión humana, `verdict = null`; no se añade un valor
+`PENDING`. El cierre administrativo cambia `status`, pero no borra ni reemplaza
+el veredicto ni su auditoría. `CLOSED` por sí solo no determina un resultado.
+
+Ejemplos válidos:
+
+| status | verdict |
+| --- | --- |
+| OPEN | `null` |
+| UNDER_REVIEW | `null` |
+| CLOSED | CONFIRMED_BEC |
+| CLOSED | FALSE_POSITIVE |
+
+Los ejemplos no definen una matriz completa de combinaciones permitidas.
+Las transiciones exactas, condiciones de cierre y permisos se definirán en
+Fase 2. No se implementa una máquina de estados en esta minifase.
 
 ### BECType
 
@@ -68,4 +91,12 @@ adicionales sin introducir nuevas categorías en esta fase.
 | MANAGER | Supervisar casos y consultar el estado agregado de riesgo. |
 | AUDITOR | Consultar evidencia y trazabilidad con acceso de solo lectura. |
 
-Estos roles son una definición inicial de responsabilidades, no RBAC funcional.
+Para el MVP, cada User tendrá **exactamente un único Role**, entre ADMIN,
+ANALYST, MANAGER y AUDITOR. Es un diseño RBAC con un rol por usuario; la
+implementación prevista en Fase 2 es un campo `role` directamente en User.
+No existe una relación `user_roles` en el diseño del MVP y múltiples roles
+por usuario quedan fuera de alcance.
+
+Si el proyecto crece y lo necesita, el modelo podrá migrar posteriormente a
+una relación many-to-many. Esa alternativa no forma parte del diseño activo
+de Fase 2. Todavía no se crean tablas, enums SQL ni RBAC funcional.
