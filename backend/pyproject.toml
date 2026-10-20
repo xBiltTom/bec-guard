@@ -10,6 +10,7 @@ dependencies = [
     "sqlalchemy>=2.0,<2.1",
     "psycopg[binary]>=3.2,<4",
     "uvicorn>=0.34,<1",
+    "alembic>=1.16,<2",
 ]
 
 [dependency-groups]
@@ -22,6 +23,7 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = ["integration: requires an isolated PostgreSQL database via TEST_DATABASE_URL"]
 
 [tool.ruff]
 target-version = "py314"

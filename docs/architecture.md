@@ -5,8 +5,9 @@
 BEC Guard es un proyecto académico de Ingeniería de Software para detectar y gestionar
 Business Email Compromise (BEC) / fraude ejecutivo. Se construye incrementalmente.
 
-**Fases 0 y 1:** definición conceptual y scaffold ejecutable. Solo están implementados
-la comprobación de salud, su consulta desde React y la infraestructura local.
+**Fases 0, 1 y 2A:** definición conceptual, scaffold ejecutable y persistencia inicial
+de User mediante SQLAlchemy y Alembic. También están implementados la comprobación
+de salud, su consulta desde React y la infraestructura local.
 No existen todavía análisis de correos, scoring, autenticación ni integraciones de IA.
 
 ## Arquitectura
@@ -31,7 +32,7 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 | --- | --- |
 | Frontend | Presentación y comunicación REST. Hoy muestra disponibilidad del backend; posteriormente permitirá revisión humana. |
 | FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Hoy ejecuta una consulta de conectividad con SQLAlchemy. |
-| PostgreSQL | Persistencia de negocio futura y datos internos de n8n. Aún no hay tablas del dominio BEC. |
+| PostgreSQL | Persistencia de User en public y datos internos de n8n en su propio esquema. Las demás tablas del dominio son futuras. |
 | n8n | Orquestar recepción y llamadas a FastAPI en el futuro. Hoy solo se provisiona su instancia vacía. |
 | LangChain (futuro) | Facilitar análisis semántico dentro del backend, detrás de una interfaz propia. No determina el contrato del dominio. |
 | Adaptadores LLM (futuros) | Traducir solicitudes y respuestas de OpenAI, Gemini, Groq u otros al contrato neutral de BEC Guard. |
@@ -41,13 +42,22 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 - `api/`: rutas HTTP.
 - `core/`: configuración y conexión a la base de datos.
 - `schemas/`: contratos Pydantic públicos implementados; hoy únicamente salud.
-- `models/`: reservado para modelos SQLAlchemy futuros.
+- `models/`: Base declarativa común, User y enum Role; no hay otras entidades SQL.
 - `services/`: reservado para casos de uso futuros.
+- `migrations/` y `alembic.ini`: historial y configuración de Alembic.
 
 Se utiliza SQLAlchemy síncrono con psycopg y rutas síncronas de FastAPI. Es suficiente
-para este alcance y evita añadir complejidad async. La conexión se crea por instancia
-de aplicación y se libera al cerrarla. No se ejecuta `create_all` ni se crean tablas
-de prueba. Las migraciones del dominio se incorporarán cuando exista un modelo SQL.
+para este alcance y evita añadir complejidad async. El engine y la fábrica de
+sesiones se crean por instancia de aplicación; el engine se libera al cerrarla.
+`get_session` prepara una sesión por petición para futuras rutas. El caso de uso
+será responsable de `commit`; cerrar la sesión revierte transacciones pendientes.
+No se añade repository pattern ni se exponen rutas de usuarios.
+
+El proceso web no ejecuta `create_all` ni migraciones. Alembic reutiliza Settings
+para su conexión y gestiona `public.users` y `public.alembic_version` mediante
+un comando explícito. La autogeneración excluye otros esquemas y tablas ajenas
+a su metadata. El downgrade de validación se ejecuta únicamente en PostgreSQL de
+prueba, separado de desarrollo y sin n8n. Consulta [persistencia](persistence.md).
 
 `GET /health` comprueba disponibilidad de la API y PostgreSQL mediante `SELECT 1`.
 Devuelve 503 cuando falla la base de datos. No se añade una segunda ruta equivalente.
@@ -62,6 +72,11 @@ volumen por primera vez. Se comparte un usuario local para simplificar el scaffo
 los esquemas separan organización, no permisos. Antes de un despliegue real habrá
 que definir usuarios y permisos independientes. Las tablas internas que crea n8n
 no son entidades BEC.
+
+Fase 2A añade exclusivamente User: UUID v4 en la aplicación, Role como enum Python
+y texto con CHECK, email único y timestamps con zona horaria. Las migraciones
+no crean, eliminan ni recrean el esquema de n8n. CI usa un service container
+PostgreSQL exclusivo del job backend para migraciones y pruebas de persistencia.
 
 Los volúmenes `postgres_data` y `n8n_data` persisten los datos y la configuración de
 n8n. Sus claves de cifrado se generan y conservan en su volumen. No se exportan al

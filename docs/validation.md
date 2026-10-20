@@ -1,4 +1,4 @@
-# Validación de Fases 0 y 1
+# Historial de validación de BEC Guard
 
 Validación realizada el 20 de octubre de 2026 en Linux.
 
@@ -39,8 +39,9 @@ conexión SQLAlchemy; las comprobaciones de Compose y navegador usan PostgreSQL 
   No impiden usar el editor. No se añadió un servicio de runners porque esta
   fase no ejecuta workflows ni nodos de código.
 
-No hay autenticación de BEC Guard, modelos SQL del dominio, motor BEC, scoring,
-integraciones LLM, recepción real de correos, workflows ni dashboards implementados.
+Al cerrar Fase 1 no había modelos SQL del dominio. Autenticación de BEC Guard,
+motor BEC, scoring, integraciones LLM, recepción real de correos, workflows de n8n
+y dashboards siguen fuera del alcance actual.
 
 ## Minifase de consolidación entre Fase 1 y Fase 2
 
@@ -65,5 +66,63 @@ pull requests a `main`, sin secretos ni servicios de base de datos.
 La validación local usó Python 3.14 y Node.js 26, compatible con `package.json`;
 CI selecciona Python 3.14 y Node.js 24. Se reutilizaron cachés locales en `/tmp`.
 TestClient se ejecutó fuera del sandbox por la limitación ya documentada.
-No se levantó Compose porque la infraestructura no cambió. No se ejecutó el
-workflow en GitHub: esta minifase no incluye push remoto. Fase 2 no se implementó.
+No se levantó Compose porque la infraestructura no cambió. El primer CI remoto
+de esta minifase sí se ejecutó correctamente en GitHub: workflow `CI`, commit
+`ee9f6e8a5f97f98e3f047328cd8ac3a43e3905d7`, resultado **success**.
+En esa minifase todavía no se implementó Fase 2.
+
+## Fase 2A: User y Alembic
+
+Se trabajó en `main` desde `ee9f6e8`, con el árbol inicialmente limpio. Se añadió
+solo User como modelo SQL, Role como enum Python con CHECK, Base común, sesiones
+y la revisión `0001_create_users`. No se implementó Fase 2B.
+
+### Migraciones ejecutadas realmente
+
+En un PostgreSQL 18 temporal, separado de Compose, sin volúmenes de desarrollo y
+sin n8n, se validó:
+
+1. Base vacía, sin tablas del dominio.
+2. `upgrade head`: existen `public.users` y `public.alembic_version`, revisión `0001_create_users`.
+3. `downgrade base`: desaparece users y alembic_version queda vacía.
+4. Nuevo `upgrade head`: users vuelve a crearse con sus constraints y timestamps con timezone.
+5. `alembic check`: sin diferencias con la metadata.
+
+La suite revierte esa base de pruebas a base al terminar. Nunca se hizo downgrade
+en desarrollo. Allí se ejecutó únicamente `alembic upgrade head` mediante Settings
+y `alembic check`, ambos correctos. Quedaron users y alembic_version, sin usuarios
+de prueba insertados.
+
+Se comparó la estructura de n8n antes y después: las mismas **160 tablas, 1270
+columnas y 1429 constraints**, con nombres y definiciones idénticos. No se creó,
+eliminó ni recreó su esquema.
+
+### Pruebas y calidad
+
+| Comprobación | Resultado |
+| --- | --- |
+| `uv sync --frozen` y comprobación de uv.lock | Correctos; solo se añadió Alembic y sus dependencias. |
+| `pytest -v` con TEST_DATABASE_URL | **11 aprobadas**, sin omisiones ni advertencias: 3 unitarias y 8 de integración. |
+| User en PostgreSQL | Commit real y lectura desde otra Session para los cuatro roles; UUID v4, email, is_active y timestamps UTC correctos. |
+| Integridad | Email duplicado rechazado por uq_users_email; rol inválido rechazado por ck_users_role incluso mediante SQL directo. |
+| Actualización | updated_at avanza, created_at se conserva y se puede cambiar is_active. |
+| Ruff check y format check | Aprobados. |
+| Frontend: lint, format:check y build | Aprobados, sin cambios en su código. |
+| actionlint 1.7.12 | Workflow válido, sin errores. |
+| Docker Compose config | Válido. |
+| Imagen backend | Construida con Alembic, alembic.ini y migrations. |
+| Alembic en Docker | upgrade head y check correctos desde la imagen nueva. |
+| Servicios después del cambio | Los cuatro healthy; API y proxy responden el contrato de salud, n8n responde 200. |
+| OpenAPI | Solo /health; sin endpoints de users o auth. |
+
+CI conserva dos jobs independientes. Solo backend incorpora un service container
+PostgreSQL 18 efímero con TEST_DATABASE_URL. Las fixtures ejecutan las migraciones
+y su ciclo de reversión. No requiere secretos reales, `.env`, Compose ni n8n.
+El workflow actualizado de Fase 2A aún no se ejecutó remotamente: no se hizo push.
+Sus comandos y el equivalente PostgreSQL local sí se validaron.
+
+TestClient y el acceso local a PostgreSQL se ejecutaron fuera del sandbox por las
+restricciones del entorno. Node local fue 26 compatible; CI mantiene Node 24.
+El servidor de pruebas solo utiliza trust en loopback y es descartable; desarrollo
+conserva sus credenciales y volúmenes. Ver [persistencia](persistence.md) para repetir
+las pruebas y conocer los límites de updated_at y normalización de email.

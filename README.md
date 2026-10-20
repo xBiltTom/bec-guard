@@ -5,20 +5,21 @@ Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combin
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fase 0 + Fase 1.** Hay documentación de dominio y contratos,
-infraestructura local y una pantalla que comprueba la salud de FastAPI y PostgreSQL.
+**Estado actual: Fases 0, 1 y 2A.** Hay documentación de dominio y contratos,
+infraestructura local, persistencia de User con Alembic y una pantalla que comprueba
+la salud de FastAPI y PostgreSQL.
 Todavía no se analizan correos ni se generan alertas.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
-exactamente un rol por usuario en el MVP. Fase 2 todavía no está implementada.
+exactamente un rol por usuario en el MVP. Fase 2B (autenticación) sigue pendiente.
 
 ## Arquitectura y stack
 
 React + TypeScript + Vite consume FastAPI mediante REST. FastAPI concentra la lógica
 del negocio y accede a PostgreSQL mediante SQLAlchemy y psycopg. Pydantic valida
-la configuración y respuestas. n8n será un orquestador de flujos, sin trasladar
-allí las reglas del dominio.
+la configuración y respuestas. Alembic versiona el esquema del dominio. n8n será
+un orquestador de flujos, sin trasladar allí las reglas del dominio.
 
 Versiones base: Python 3.14, Node.js 24 LTS, React 19, Vite 8, TypeScript 6,
 PostgreSQL 18 y n8n 2.44.4. Las dependencias de aplicación quedan fijadas en
@@ -35,6 +36,7 @@ Documentación:
 - [Arquitectura y flujo futuro](docs/architecture.md)
 - [Dominio, entidades, roles y enums](docs/domain.md)
 - [Contratos de salud y análisis futuro](docs/api-contracts.md)
+- [Persistencia, migraciones y base de pruebas](docs/persistence.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
 ## Requisitos
@@ -86,11 +88,15 @@ para validar usa `--quiet`.
 ```bash
 docker compose config --quiet
 docker compose up --build -d --wait --wait-timeout 180
+docker compose exec backend alembic upgrade head
 docker compose ps
 ```
 
 La primera ejecución descarga imágenes, instala dependencias y deja que n8n cree
 sus tablas internas. En ejecuciones posteriores basta `docker compose up -d`.
+Las migraciones de BEC Guard son explícitas: ejecuta `alembic upgrade head` después
+de actualizar el código. FastAPI no las aplica al arrancar y `/health` solo verifica
+conectividad, no que el esquema esté actualizado.
 
 | Servicio | URL o conexión local |
 | --- | --- |
@@ -143,9 +149,11 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-Las pruebas unitarias verifican el contrato HTTP, la ejecución de `SELECT 1` y
-el manejo de errores 503 sin revelar detalles privados. Sustituyen la conexión a
-la base de datos; la conexión real se comprueba con Compose y los comandos anteriores.
+Las tres pruebas unitarias verifican el contrato de salud y sus errores sin revelar
+detalles privados. Las ocho pruebas de integración verifican migraciones y User
+contra PostgreSQL real. Requieren `TEST_DATABASE_URL`, una variable independiente de
+`.env`, apuntando a una base de pruebas vacía. Sin ella se omiten las de integración.
+Consulta [cómo levantar esa base y ejecutar la suite completa](docs/persistence.md#pruebas-de-integración).
 
 Frontend, desde `frontend/`:
 
@@ -166,8 +174,26 @@ El workflow [CI](.github/workflows/ci.yml) se ejecuta en pushes a `main` y pull
 requests hacia `main`. Usa dos jobs independientes en Ubuntu: backend con Python
 3.14 y uv 0.13.4, y frontend con Node.js 24. Instala desde los lockfiles y ejecuta
 las mismas pruebas, linting, comprobaciones de formato y build descritos arriba.
-Reutiliza las cachés de uv y npm; no necesita secretos, `.env`, PostgreSQL ni
-Docker Compose. No realiza despliegues.
+Reutiliza las cachés de uv y npm. El job backend incluye un PostgreSQL 18 efímero
+de pruebas y configura `TEST_DATABASE_URL`; pytest aplica las migraciones y prueba
+upgrade/downgrade/upgrade. No requiere secretos, `.env`, n8n ni Docker Compose.
+El job frontend no usa PostgreSQL. No realiza despliegues.
+
+## Migraciones
+
+Desde `backend/`, usando la configuración de `.env` de la raíz:
+
+```bash
+uv run alembic upgrade head
+uv run alembic current
+uv run alembic check
+```
+
+Para crear una revisión: `uv run alembic revision --autogenerate -m "describe change"`.
+Revisa el archivo generado antes de aplicarlo. Para revertir la última revisión:
+`uv run alembic downgrade -1`. En esta primera revisión, revertir elimina `users`
+y sus datos; el ciclo destructivo de validación se realiza solo en la base de test.
+No se modifica el esquema `n8n`. Más detalles en [persistencia](docs/persistence.md).
 
 ## Desarrollo de aplicaciones en el host
 
@@ -211,7 +237,8 @@ docker compose down
 en `.env` no cambia usuarios ya existentes dentro de un volumen PostgreSQL.
 
 `docker/postgres/init.sql` solo se ejecuta al inicializar un volumen vacío y crea
-el esquema `n8n`. BEC Guard reserva `public`, sin tablas de negocio todavía.
+el esquema `n8n`. BEC Guard usa `public.users` y `public.alembic_version` después
+de aplicar su migración inicial.
 Ambos servicios comparten usuario únicamente para este entorno local. n8n gestiona
 sus propias tablas, migraciones y claves de cifrado; conserva ambos volúmenes.
 
@@ -232,11 +259,13 @@ backend/
   app/
     api/           # Ruta /health
     core/          # Settings y SQLAlchemy
-    models/        # Reservado; sin tablas de negocio
+    models/        # Base declarativa, User y Role
     schemas/       # Respuesta de salud
     services/      # Reservado; sin motor BEC
     main.py
   tests/
+  migrations/      # Alembic: env.py, plantilla y versions/
+  alembic.ini
   Dockerfile
   pyproject.toml
   uv.lock
@@ -254,13 +283,14 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente para Fase 2 y posteriores
+## Pendiente para Fase 2B y posteriores
 
-La priorización de Fase 2 debe acordarse antes de implementarla. Quedan pendientes
-la persistencia de entidades y migraciones, autenticación y permisos, gestión de
+Fase 2A implementa únicamente User, Role y migraciones. Quedan pendientes
+autenticación, hashing y verificación de contraseñas, tokens y permisos, gestión de
 ejecutivos y proveedores, ingestión de correos y parser MIME, reglas BEC, scoring,
 LangChain, adaptadores LLM y prompts, revisión de alertas, auditoría y workflows.
 También quedan fuera dashboards, reportes, Gmail, IMAP y Microsoft Graph.
 
-Las definiciones de roles y contratos son diseño inicial, no funcionalidades
-simuladas. No se han agregado endpoints de negocio ficticios ni integraciones IA.
+Role ya se persiste, pero no hay RBAC funcional ni endpoints de usuarios o auth.
+Las demás entidades y los contratos de análisis siguen siendo diseño conceptual.
+No se han agregado endpoints de negocio ficticios ni integraciones IA.

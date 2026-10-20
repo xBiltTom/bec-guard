@@ -10,6 +10,8 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project \
     && useradd --system --uid 10001 appuser
 COPY app ./app
+COPY alembic.ini ./
+COPY migrations ./migrations
 USER appuser
 
 EXPOSE 8000

@@ -1,15 +1,16 @@
 # Dominio mínimo
 
-Estas definiciones son conceptuales de Fase 0. No implican tablas, endpoints CRUD,
-autenticación ni reglas implementadas. Los identificadores futuros serán UUID y
+Estas definiciones parten de Fase 0. En Fase 2A solo User y Role tienen persistencia
+implementada; los demás conceptos siguen siendo futuros. No hay endpoints CRUD,
+autenticación ni reglas implementadas. Los identificadores son UUID y
 las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC.
 
 ## Conceptos
 
 | Concepto | Definición y datos previstos |
 | --- | --- |
-| User | Persona que accede al sistema: identificador, nombre, correo y exactamente un rol en el MVP. La estrategia de autenticación queda pendiente. |
-| Role | Responsabilidad de un usuario. Cada usuario tiene un único rol; la autorización aún no existe. |
+| User | Persona prevista para acceder al sistema. Ya se persisten id, name, email, password_hash, role, is_active, created_at y updated_at. Exactamente un rol por usuario; autenticación pendiente de Fase 2B. |
+| Role | Enum Python persistido como texto con CHECK en users.role. Cada usuario tiene un único rol; la autorización aún no existe. |
 | ExecutiveContact | Ejecutivo conocido: identificador, nombre, cargo, correos y dominios legítimos. Aporta contexto para reconocer suplantaciones. |
 | Vendor | Proveedor conocido: identificador, razón social, contactos y dominios legítimos. El tratamiento de cuentas bancarias se definirá cuando se implemente su gestión. |
 | Email | Correo normalizado para análisis: identificador, remitente, destinatarios, asunto, texto y fecha de recepción. Su parser y mecanismo de ingestión son futuros. |
@@ -21,6 +22,22 @@ Relaciones principales: User tiene exactamente un Role; Email tiene EmailAnalysi
 referencia EmailAnalysis y opcionalmente User como responsable; AuditLog permite
 rastrear acciones sobre estos recursos. ExecutiveContact y Vendor aportan contexto
 al análisis, sin exigir que todo remitente esté previamente registrado.
+
+## User persistente (Fase 2A)
+
+La tabla `public.users` usa UUID v4 generado por la aplicación al insertar.
+`email` es obligatorio y único; `name`, `password_hash` y `role` también son
+obligatorios. `is_active` es obligatorio y tiene default `true`.
+
+`created_at` y `updated_at` son timestamps con zona horaria, generados por
+PostgreSQL. Las conexiones del backend usan UTC. SQLAlchemy actualiza `updated_at`
+cuando modifica la fila; `created_at` se conserva. Los detalles y las limitaciones
+de escrituras SQL directas se describen en [persistencia](persistence.md).
+
+`password_hash` es únicamente almacenamiento requerido de un hash futuro: no se
+implementan hashing, verificación de contraseñas ni autenticación hasta Fase 2B.
+La normalización de email a minúsculas se definirá antes de exponer altas de
+usuarios; la unicidad actual compara el texto exacto, sin normalización automática.
 
 ## Enumeraciones previstas
 
@@ -93,10 +110,11 @@ adicionales sin introducir nuevas categorías en esta fase.
 
 Para el MVP, cada User tendrá **exactamente un único Role**, entre ADMIN,
 ANALYST, MANAGER y AUDITOR. Es un diseño RBAC con un rol por usuario; la
-implementación prevista en Fase 2 es un campo `role` directamente en User.
+implementación de Fase 2A usa el campo `role` directamente en User.
 No existe una relación `user_roles` en el diseño del MVP y múltiples roles
 por usuario quedan fuera de alcance.
 
 Si el proyecto crece y lo necesita, el modelo podrá migrar posteriormente a
 una relación many-to-many. Esa alternativa no forma parte del diseño activo
-de Fase 2. Todavía no se crean tablas, enums SQL ni RBAC funcional.
+de Fase 2. Role se implementa como enum Python y columna de texto con un CHECK;
+no se crea un tipo enum nativo PostgreSQL ni RBAC funcional.

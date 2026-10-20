@@ -7,13 +7,14 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.health import router as health_router
 from app.core.config import Settings
-from app.core.database import create_database_engine
+from app.core.database import create_database_engine, create_session_factory
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.engine = create_database_engine(settings or Settings())
+        app.state.session_factory = create_session_factory(app.state.engine)
         try:
             yield
         finally:

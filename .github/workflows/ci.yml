@@ -13,6 +13,21 @@ jobs:
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: bec_guard_test
+          POSTGRES_USER: bec_guard_test
+          # Ephemeral CI database only; no credentials or repository secrets.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bec_guard_test -d bec_guard_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://bec_guard_test@127.0.0.1:5432/bec_guard_test
     defaults:
       run:
         working-directory: backend
@@ -27,6 +42,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - run: uv sync --frozen
+      # Integration fixtures apply real migrations and test upgrade/downgrade/upgrade.
       - run: uv run pytest
       - run: uv run ruff check .
       - run: uv run ruff format --check .
