@@ -39,9 +39,9 @@ conexión SQLAlchemy; las comprobaciones de Compose y navegador usan PostgreSQL 
   No impiden usar el editor. No se añadió un servicio de runners porque esta
   fase no ejecuta workflows ni nodos de código.
 
-Al cerrar Fase 1 no había modelos SQL del dominio. Autenticación de BEC Guard,
-motor BEC, scoring, integraciones LLM, recepción real de correos, workflows de n8n
-y dashboards siguen fuera del alcance actual.
+Al cerrar Fase 1 no había modelos SQL del dominio ni autenticación. Motor BEC,
+scoring, integraciones LLM, recepción real de correos, workflows de n8n y dashboards
+siguen fuera del alcance actual.
 
 ## Minifase de consolidación entre Fase 1 y Fase 2
 
@@ -118,11 +118,60 @@ eliminó ni recreó su esquema.
 CI conserva dos jobs independientes. Solo backend incorpora un service container
 PostgreSQL 18 efímero con TEST_DATABASE_URL. Las fixtures ejecutan las migraciones
 y su ciclo de reversión. No requiere secretos reales, `.env`, Compose ni n8n.
-El workflow actualizado de Fase 2A aún no se ejecutó remotamente: no se hizo push.
-Sus comandos y el equivalente PostgreSQL local sí se validaron.
+El CI remoto de Fase 2A sobre `7ff605a86a617b0ead97c00abf3702a593538c6a`
+terminó en **SUCCESS** en GitHub. Sus comandos y el equivalente PostgreSQL local
+también se validaron.
 
 TestClient y el acceso local a PostgreSQL se ejecutaron fuera del sandbox por las
 restricciones del entorno. Node local fue 26 compatible; CI mantiene Node 24.
 El servidor de pruebas solo utiliza trust en loopback y es descartable; desarrollo
 conserva sus credenciales y volúmenes. Ver [persistencia](persistence.md) para repetir
 las pruebas y conocer los límites de updated_at y normalización de email.
+
+## Fase 2B: autenticación, RBAC y auditoría
+
+Se partió de main limpio en `7ff605a`. Se validaron incrementalmente 2B.1
+(identidad, passwords y bootstrap), 2B.2 (login/JWT/me), 2B.3 (RBAC) y 2B.4
+(auditoría). No se hizo push ni se implementó Fase 3.
+
+| Comprobación final | Resultado |
+| --- | --- |
+| Suite backend con PostgreSQL 18 real | **59 pruebas aprobadas**, sin omisiones: 17 unitarias y 42 de integración. |
+| Identidad | trim/lowercase, duplicados por casing rechazados incluso por SQL directo, colisiones de migración abortadas sin fusionar ni avanzar versión. |
+| Passwords/bootstrap | Argon2id, verificación correcta/incorrecta, política 12–128, rehash y ADMIN normalizado; duplicados rechazados. |
+| JWT y /me | Expiración, firma inválida, manipulación, sub inválido/inexistente, secreto obligatorio y respuestas sin hash. |
+| RBAC | Roles permitidos, 403, inactivo 401 y cambios de rol sin otro token; un claim role no sobreescribe DB. |
+| Auditoría | Bootstrap y login exitoso/fallido/inactivo auditados; RBAC denegado auditado; sin password/hash/token en details ni logs. |
+| Inmutabilidad | INSERT permitido; UPDATE y DELETE de filas rechazados por PostgreSQL con SQLSTATE 55000. |
+| Migraciones | head → 0001 → head y head → base → head correctos en la BD descartable. Tabla, función y trigger se eliminan/recrean. |
+| Metadata | alembic check sin diferencias tanto en desarrollo como en la imagen Docker nueva. |
+| Ruff | check y format --check aprobados. |
+| Frontend | lint, format:check y build aprobados; sin cambios en frontend. |
+| Configuración | uv sync --frozen y lock check correctos; Compose válido y backend nuevo healthy. |
+| CI | actionlint válido; se conserva PostgreSQL efímero y ambos jobs anteriores, sin nuevos secrets. |
+
+También se ejecutó el CLI real en una terminal virtual, con contraseña aleatoria
+oculta y confirmación. La salida no contenía password ni hash. En esa misma BD
+descartable, un proceso Uvicorn real pasó login y /me por HTTP, errores genéricos,
+cambio de rol y desactivación conservando el token. Se verificaron cinco eventos
+persistentes sin credenciales en details ni logs. Después se detuvo el proceso y
+se revirtió la BD descartable. No se crearon ADMIN ni eventos de prueba en desarrollo.
+
+En desarrollo solo se hizo upgrade de 0001 a 0003. La comparación de n8n antes y
+después mantuvo **160 tablas, 1270 columnas y 1429 constraints** idénticos. La API,
+el proxy del frontend y n8n responden salud 200. OpenAPI publica exactamente
+/health, /api/auth/login y /api/auth/me; /me sin token responde 401.
+
+Para evitar diferencias falsas de claves foráneas en Alembic se usa metadata
+con esquema por defecto y search_path=public, conservando public explícito en
+las revisiones. No se modificó 0001_create_users ni se tocaron objetos de n8n.
+
+El secreto JWT local se generó aleatoriamente dentro de `.env` ignorado con permisos
+600, sin imprimirlo. Los tests generan sus propias claves; CI no requiere secrets
+adicionales. El CI remoto nuevo de 2B queda pendiente del push que realizará el
+usuario; el CI anterior de 2A ya figura arriba como SUCCESS.
+
+Se mantienen las limitaciones documentadas en [autenticación](authentication.md):
+sin refresh/revocación por sesión, recuperación, MFA, CRUD, frontend de auth ni
+rate limiting/lockout. El trigger protege UPDATE/DELETE, no acciones DDL de un
+propietario. Las pruebas siguen siendo secuenciales y sobre una BD descartable.

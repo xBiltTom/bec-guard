@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,3 +28,11 @@ class Settings(BaseSettings):
             port=self.postgres_port,
             database=self.postgres_db,
         )
+
+
+class AuthSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=ROOT_ENV, extra="ignore", hide_input_in_errors=True)
+
+    jwt_secret_key: SecretStr = Field(min_length=32)
+    jwt_access_token_minutes: int = Field(default=30, ge=1, le=1440)
+    jwt_algorithm: Literal["HS256"] = "HS256"

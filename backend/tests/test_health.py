@@ -1,3 +1,4 @@
+import secrets
 from collections.abc import Iterator
 from unittest.mock import MagicMock
 
@@ -5,7 +6,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Connection
 from sqlalchemy.exc import OperationalError
 
-from app.core.config import Settings
+from app.core.config import AuthSettings, Settings
 from app.core.database import get_connection
 from app.main import create_app
 
@@ -18,7 +19,8 @@ def make_app():
             postgres_db="unit_test",
             postgres_user="unit_test",
             postgres_password="unit-test-only",
-        )
+        ),
+        AuthSettings(_env_file=None, jwt_secret_key=secrets.token_urlsafe(48)),
     )
 
 

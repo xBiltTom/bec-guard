@@ -22,6 +22,9 @@ services:
   backend:
     build: ./backend
     environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      JWT_ACCESS_TOKEN_MINUTES: ${JWT_ACCESS_TOKEN_MINUTES:-30}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}

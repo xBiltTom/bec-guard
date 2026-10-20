@@ -1,22 +1,22 @@
 # Dominio mínimo
 
-Estas definiciones parten de Fase 0. En Fase 2A solo User y Role tienen persistencia
-implementada; los demás conceptos siguen siendo futuros. No hay endpoints CRUD,
-autenticación ni reglas implementadas. Los identificadores son UUID y
+Estas definiciones parten de Fase 0. User, Role y AuditLog tienen persistencia;
+Fase 2B incorpora autenticación y RBAC backend. Los demás conceptos siguen siendo
+futuros, sin endpoints CRUD ni reglas BEC implementadas. Los identificadores son UUID y
 las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC.
 
 ## Conceptos
 
 | Concepto | Definición y datos previstos |
 | --- | --- |
-| User | Persona prevista para acceder al sistema. Ya se persisten id, name, email, password_hash, role, is_active, created_at y updated_at. Exactamente un rol por usuario; autenticación pendiente de Fase 2B. |
-| Role | Enum Python persistido como texto con CHECK en users.role. Cada usuario tiene un único rol; la autorización aún no existe. |
+| User | Identidad autenticable con id, name, email normalizado, password_hash Argon2id, role, is_active y timestamps. Exactamente un rol por usuario, consultado desde DB al autorizar. |
+| Role | Enum Python persistido como texto con CHECK. Cada usuario tiene un único rol; require_roles aplica RBAC sobre su rol actual. |
 | ExecutiveContact | Ejecutivo conocido: identificador, nombre, cargo, correos y dominios legítimos. Aporta contexto para reconocer suplantaciones. |
 | Vendor | Proveedor conocido: identificador, razón social, contactos y dominios legítimos. El tratamiento de cuentas bancarias se definirá cuando se implemente su gestión. |
 | Email | Correo normalizado para análisis: identificador, remitente, destinatarios, asunto, texto y fecha de recepción. Su parser y mecanismo de ingestión son futuros. |
 | EmailAnalysis | Ejecución de análisis de un Email: identificador, referencia al correo, fecha, versión del analizador y resultado neutral `BECAnalysisResult`. Un correo podrá tener varios análisis. |
 | BECAlert | Caso para revisión humana asociado a un análisis: identificador, estado operativo `status` (AlertStatus), veredicto humano `verdict` (AlertVerdict o `null`), responsable opcional y fechas. Su creación dependerá de una política futura, no de todo análisis automáticamente. |
-| AuditLog | Registro de una acción relevante: identificador, actor humano o sistema, acción, recurso afectado y fecha. No debe copiar secretos ni cuerpos completos de correos. |
+| AuditLog | Registro persistente append-only con UUID, actor nullable, snapshot de rol, acción, recurso nullable, IP nullable, details JSONB mínimos y fecha. Un trigger impide UPDATE/DELETE. Nunca copia passwords, hashes, JWT ni cuerpos de correo. |
 
 Relaciones principales: User tiene exactamente un Role; Email tiene EmailAnalysis; BECAlert
 referencia EmailAnalysis y opcionalmente User como responsable; AuditLog permite
@@ -34,10 +34,10 @@ PostgreSQL. Las conexiones del backend usan UTC. SQLAlchemy actualiza `updated_a
 cuando modifica la fila; `created_at` se conserva. Los detalles y las limitaciones
 de escrituras SQL directas se describen en [persistencia](persistence.md).
 
-`password_hash` es únicamente almacenamiento requerido de un hash futuro: no se
-implementan hashing, verificación de contraseñas ni autenticación hasta Fase 2B.
-La normalización de email a minúsculas se definirá antes de exponer altas de
-usuarios; la unicidad actual compara el texto exacto, sin normalización automática.
+Fase 2B genera/verifica password_hash con Argon2id y política de 12–128 caracteres.
+Email se normaliza con trim + lowercase; un índice UNIQUE sobre lower(email)
+impide duplicados por casing incluso mediante SQL directo. No hay registro público:
+solo un CLI interactivo para el primer ADMIN. Ver [autenticación](authentication.md).
 
 ## Enumeraciones previstas
 
@@ -117,4 +117,5 @@ por usuario quedan fuera de alcance.
 Si el proyecto crece y lo necesita, el modelo podrá migrar posteriormente a
 una relación many-to-many. Esa alternativa no forma parte del diseño activo
 de Fase 2. Role se implementa como enum Python y columna de texto con un CHECK;
-no se crea un tipo enum nativo PostgreSQL ni RBAC funcional.
+no se crea un tipo enum nativo PostgreSQL. RBAC es una dependencia reutilizable;
+los permisos de entidades futuras se definirán cuando existan esas funciones.

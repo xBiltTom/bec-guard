@@ -49,7 +49,7 @@ def test_duplicate_email_is_rejected_by_postgresql(db_session):
 
     with pytest.raises(IntegrityError) as error:
         db_session.commit()
-    assert error.value.orig.diag.constraint_name == "uq_users_email"
+    assert error.value.orig.diag.constraint_name == "uq_users_email_lower"
     db_session.rollback()
 
 

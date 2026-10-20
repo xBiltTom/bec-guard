@@ -5,14 +5,14 @@ Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combin
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fases 0, 1 y 2A.** Hay documentación de dominio y contratos,
-infraestructura local, persistencia de User con Alembic y una pantalla que comprueba
-la salud de FastAPI y PostgreSQL.
+**Estado actual: Fases 0, 1, 2A y 2B.** Hay persistencia de User y AuditLog,
+autenticación backend con Argon2id y JWT, RBAC reutilizable y una pantalla mínima
+que comprueba la salud de FastAPI y PostgreSQL. No hay frontend de autenticación.
 Todavía no se analizan correos ni se generan alertas.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
-exactamente un rol por usuario en el MVP. Fase 2B (autenticación) sigue pendiente.
+exactamente un rol por usuario en el MVP. Fase 3 sigue pendiente.
 
 ## Arquitectura y stack
 
@@ -37,6 +37,7 @@ Documentación:
 - [Dominio, entidades, roles y enums](docs/domain.md)
 - [Contratos de salud y análisis futuro](docs/api-contracts.md)
 - [Persistencia, migraciones y base de pruebas](docs/persistence.md)
+- [Autenticación, bootstrap ADMIN, JWT, RBAC y auditoría](docs/authentication.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
 ## Requisitos
@@ -63,8 +64,9 @@ chmod 600 .env
 ```
 
 Edita `.env` y asigna una contraseña local aleatoria y no vacía a
-`POSTGRES_PASSWORD`. Puedes generarla con `openssl rand -hex 32`. No existe una
-contraseña predeterminada. Las claves futuras de IA deben permanecer vacías.
+`POSTGRES_PASSWORD` y una clave JWT independiente a `JWT_SECRET_KEY` (mínimo 32
+caracteres aleatorios). Puedes generar cada valor con `openssl rand -hex 32`.
+No existen credenciales predeterminadas. Las claves futuras de IA siguen vacías.
 
 | Variable | Uso |
 | --- | --- |
@@ -74,6 +76,8 @@ contraseña predeterminada. Las claves futuras de IA deben permanecer vacías.
 | POSTGRES_PORT | Puerto PostgreSQL publicado en el host; internamente usa 5432. |
 | BACKEND_PORT / FRONTEND_PORT / N8N_PORT | Puertos publicados, por defecto 8000 / 5173 / 5678. |
 | GENERIC_TIMEZONE | Zona horaria de n8n; por defecto America/Lima. |
+| JWT_SECRET_KEY | Obligatoria para la API, sin valor predeterminado; solo en `.env`/entorno. |
+| JWT_ACCESS_TOKEN_MINUTES / JWT_ALGORITHM | Expiración de acceso (30 minutos por defecto) y HS256. |
 | LLM_PROVIDER / LLM_MODEL | Reservadas, sin uso actual. |
 | OPENAI_API_KEY / GOOGLE_API_KEY / GROQ_API_KEY | Reservadas, sin uso actual; nunca se envían al frontend. |
 
@@ -149,9 +153,9 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-Las tres pruebas unitarias verifican el contrato de salud y sus errores sin revelar
-detalles privados. Las ocho pruebas de integración verifican migraciones y User
-contra PostgreSQL real. Requieren `TEST_DATABASE_URL`, una variable independiente de
+La suite verifica salud, passwords, JWT, bootstrap, login/me, RBAC, persistencia,
+migraciones y auditoría append-only. Las pruebas de integración usan PostgreSQL
+real y requieren `TEST_DATABASE_URL`, una variable independiente de
 `.env`, apuntando a una base de pruebas vacía. Sin ella se omiten las de integración.
 Consulta [cómo levantar esa base y ejecutar la suite completa](docs/persistence.md#pruebas-de-integración).
 
@@ -179,6 +183,24 @@ de pruebas y configura `TEST_DATABASE_URL`; pytest aplica las migraciones y prue
 upgrade/downgrade/upgrade. No requiere secretos, `.env`, n8n ni Docker Compose.
 El job frontend no usa PostgreSQL. No realiza despliegues.
 
+## Primer ADMIN y autenticación
+
+Después de aplicar las migraciones, abre una terminal interactiva:
+
+```bash
+docker compose exec backend python -m app.scripts.create_admin
+```
+
+Solicita nombre, email y contraseña oculta con confirmación; no acepta passwords
+como argumentos ni crea usuarios automáticamente. En el host, desde `backend/`:
+`uv run python -m app.scripts.create_admin`. El bootstrap rechaza emails ocupados
+y otro ADMIN existente.
+
+La API ofrece `POST /api/auth/login` (JSON email/password) y `GET /api/auth/me`
+(Bearer). El token de acceso dura 30 minutos por defecto; rol y estado activo se
+consultan en PostgreSQL en cada petición. No hay refresh tokens ni registro público.
+Consulta los [contratos y ejemplos curl](docs/authentication.md#contratos-http).
+
 ## Migraciones
 
 Desde `backend/`, usando la configuración de `.env` de la raíz:
@@ -191,8 +213,8 @@ uv run alembic check
 
 Para crear una revisión: `uv run alembic revision --autogenerate -m "describe change"`.
 Revisa el archivo generado antes de aplicarlo. Para revertir la última revisión:
-`uv run alembic downgrade -1`. En esta primera revisión, revertir elimina `users`
-y sus datos; el ciclo destructivo de validación se realiza solo en la base de test.
+`uv run alembic downgrade -1`. Revertir 0003 elimina la auditoría; llegar a base
+elimina también users. El ciclo destructivo se valida solo en la base de test.
 No se modifica el esquema `n8n`. Más detalles en [persistencia](docs/persistence.md).
 
 ## Desarrollo de aplicaciones en el host
@@ -237,8 +259,8 @@ docker compose down
 en `.env` no cambia usuarios ya existentes dentro de un volumen PostgreSQL.
 
 `docker/postgres/init.sql` solo se ejecuta al inicializar un volumen vacío y crea
-el esquema `n8n`. BEC Guard usa `public.users` y `public.alembic_version` después
-de aplicar su migración inicial.
+el esquema `n8n`. BEC Guard usa users, audit_log y alembic_version en public después
+de aplicar las migraciones.
 Ambos servicios comparten usuario únicamente para este entorno local. n8n gestiona
 sus propias tablas, migraciones y claves de cifrado; conserva ambos volúmenes.
 
@@ -259,9 +281,10 @@ backend/
   app/
     api/           # Ruta /health
     core/          # Settings y SQLAlchemy
-    models/        # Base declarativa, User y Role
+    models/        # Base declarativa, User, Role y AuditLog
     schemas/       # Respuesta de salud
-    services/      # Reservado; sin motor BEC
+    services/      # Bootstrap, autenticación y auditoría; sin motor BEC
+    scripts/       # CLI create_admin
     main.py
   tests/
   migrations/      # Alembic: env.py, plantilla y versions/
@@ -283,14 +306,14 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente para Fase 2B y posteriores
+## Pendiente para Fase 3 y posteriores
 
-Fase 2A implementa únicamente User, Role y migraciones. Quedan pendientes
-autenticación, hashing y verificación de contraseñas, tokens y permisos, gestión de
+Fase 2B añade únicamente autenticación backend, RBAC y auditoría. Quedan pendientes
+frontend de autenticación, CRUD de usuarios, recuperación, refresh tokens y gestión de
 ejecutivos y proveedores, ingestión de correos y parser MIME, reglas BEC, scoring,
-LangChain, adaptadores LLM y prompts, revisión de alertas, auditoría y workflows.
+LangChain, adaptadores LLM y prompts, revisión de alertas y workflows de n8n.
 También quedan fuera dashboards, reportes, Gmail, IMAP y Microsoft Graph.
 
-Role ya se persiste, pero no hay RBAC funcional ni endpoints de usuarios o auth.
+Solo hay endpoints de auth y salud; no hay CRUD ni permisos de negocio todavía.
 Las demás entidades y los contratos de análisis siguen siendo diseño conceptual.
 No se han agregado endpoints de negocio ficticios ni integraciones IA.

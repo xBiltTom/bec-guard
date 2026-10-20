@@ -19,7 +19,7 @@ def include_name(name, type_, parent_names):
         return name in (None, "public")
     if type_ == "table":
         # Ignore unmanaged tables as well as n8n during autogeneration.
-        return f"public.{name}" in target_metadata.tables
+        return name in target_metadata.tables
     return True
 
 

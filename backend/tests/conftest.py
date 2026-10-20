@@ -1,16 +1,21 @@
 import os
+import secrets
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Engine, create_engine, delete, inspect, text
+from fastapi.testclient import TestClient
+from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.core.database import create_session_factory
-from app.models import User
+from app.core.config import AuthSettings, Settings
+from app.core.database import create_session_factory, get_session
+from app.core.passwords import hash_password
+from app.main import create_app
+from app.models import Role, User
 
 
 @pytest.fixture(scope="session")
@@ -80,4 +85,49 @@ def db_session(migrated_engine) -> Iterator[Session]:
         finally:
             session.rollback()
             with migrated_engine.begin() as connection:
-                connection.execute(delete(User))
+                # Guarded, disposable test DB only. Do not disable the audit trigger.
+                connection.execute(text("TRUNCATE public.audit_log, public.users"))
+
+
+@pytest.fixture(scope="session")
+def auth_settings():
+    return AuthSettings(_env_file=None, jwt_secret_key=secrets.token_urlsafe(48))
+
+
+@pytest.fixture
+def api_app(db_session, migrated_engine, auth_settings):
+    application = create_app(
+        Settings(
+            _env_file=None,
+            postgres_db="unit_test",
+            postgres_user="unit_test",
+            postgres_password="test-only",
+        ),
+        auth_settings,
+    )
+
+    def session_override():
+        with create_session_factory(migrated_engine)() as session:
+            yield session
+
+    application.dependency_overrides[get_session] = session_override
+    return application
+
+
+@pytest.fixture
+def api_client(api_app):
+    with TestClient(api_app) as client:
+        yield client
+
+
+@pytest.fixture
+def account(db_session):
+    user = User(
+        name="Test Analyst",
+        email="analyst@example.com",
+        password_hash=hash_password("a long test password"),
+        role=Role.ANALYST,
+    )
+    db_session.add(user)
+    db_session.commit()
+    return user

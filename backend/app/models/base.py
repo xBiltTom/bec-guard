@@ -4,7 +4,8 @@ from sqlalchemy.orm import DeclarativeBase
 
 class Base(DeclarativeBase):
     metadata = MetaData(
-        schema="public",
+        # Connections pin search_path=public. Leave the default schema implicit
+        # so PostgreSQL FK reflection and Alembic compare the same identifiers.
         naming_convention={
             "pk": "pk_%(table_name)s",
             "uq": "uq_%(table_name)s_%(column_0_name)s",

@@ -1,19 +1,22 @@
-# Persistencia de Fase 2A
+# Persistencia de Fases 2A y 2B
 
-El dominio persistente actual es únicamente `User`. No hay endpoints de usuarios,
-autenticación, JWT, RBAC funcional, auditoría persistente ni otras entidades SQL.
+El dominio persistente actual contiene `User` y `AuditLog`. Hay autenticación
+backend y RBAC, sin CRUD de usuarios ni otras entidades SQL. Los contratos de auth
+y el bootstrap se describen en [autenticación](authentication.md).
 
 ## Modelo y decisiones
 
-`app.models.Base` concentra la metadata en `public` y nombres estables de
-constraints. `app.models.User` define `public.users`:
+`app.models.Base` concentra la metadata y nombres estables de constraints.
+Las conexiones fijan `search_path=public`; la metadata usa el esquema por defecto
+sin prefijo para que la reflexión de claves foráneas coincida con PostgreSQL.
+Las revisiones sí indican public explícitamente. `app.models.User` define users:
 
 | Campo | Tipo y comportamiento |
 | --- | --- |
 | id | UUID, clave primaria, UUID v4 generado con `uuid4` al insertar mediante SQLAlchemy. |
 | name | VARCHAR(200), obligatorio. |
-| email | VARCHAR(320), obligatorio y UNIQUE (`uq_users_email`). |
-| password_hash | TEXT obligatorio; sin default ni lógica de hashing. |
+| email | VARCHAR(320), obligatorio, normalizado; índice UNIQUE `uq_users_email_lower` sobre lower(email). |
+| password_hash | TEXT obligatorio, generado con Argon2id por el servicio; sin default SQL. |
 | role | VARCHAR(7) obligatorio, con CHECK `ck_users_role`. Sin default: el creador deberá elegir un rol. |
 | is_active | BOOLEAN obligatorio, default de servidor `true`. |
 | created_at | TIMESTAMP WITH TIME ZONE obligatorio, default de servidor `CURRENT_TIMESTAMP`. |
@@ -21,10 +24,9 @@ constraints. `app.models.User` define `public.users`:
 
 El UUID se genera en la aplicación para no depender de extensiones ni funciones
 PostgreSQL. No existe default SQL para `id`: las escrituras SQL directas deben
-proporcionarlo. El índice creado por UNIQUE ya cubre email; no se añade otro índice
-redundante. La comparación de emails es sensible a mayúsculas y no se normaliza
-todavía. Antes de implementar altas en Fase 2B se deberá definir y aplicar una
-política de normalización consistente.
+proporcionarlo. No se añade un segundo índice de email redundante. Fase 2B reemplaza
+la unicidad exacta de 0001 por un índice funcional case-insensitive y normaliza con
+trim + lowercase. La revisión 0002 aborta sin fusionar si detecta colisiones.
 
 `app.models.enums.Role` es un `StrEnum` reutilizable: ADMIN, ANALYST, MANAGER y
 AUDITOR. SQLAlchemy valida los valores y el CHECK protege también escrituras
@@ -39,16 +41,22 @@ mediante `onupdate` de SQLAlchemy, **no mediante un trigger**: una actualizació
 SQL externa deberá asignarlo explícitamente. No se generan fechas naive en Python.
 Si futuras entradas aceptan fechas, deberán validar que incluyan zona horaria.
 
-`password_hash` almacenará únicamente hashes. Fase 2A no acepta contraseñas, no
-crea usuarios reales ni implementa funciones para producir o verificar hashes.
-Los tests usan un marcador opaco exclusivo de pruebas, no una contraseña ni un
-hash utilizable. Hashing y autenticación pertenecen a Fase 2B.
+`password_hash` almacena hashes Argon2id; el CLI de bootstrap nunca persiste la
+contraseña original. Los tests de almacenamiento de User conservan un marcador
+opaco no utilizable para login, mientras que los de autenticación usan hashes
+reales de contraseñas exclusivas de tests. No existe creación automática de cuentas.
+
+`AuditLog` añade trazabilidad append-only: UUID, actor nullable y snapshot de rol,
+acción, recurso nullable, IP nullable, details JSONB nullable y created_at con
+timezone. La FK de actor usa RESTRICT, para no modificar auditoría al borrar usuarios.
+Un trigger rechaza UPDATE y DELETE; no hay rutas de modificación. Ver los eventos,
+la política de datos mínimos y los límites en [auditoría](authentication.md#auditlog).
 
 ## Sesiones
 
 El lifespan de FastAPI crea un engine y una fábrica `sessionmaker` por aplicación.
 `get_session` en `app/core/database.py` abre y cierra una Session por petición para
-futuras rutas. Quien realiza una escritura debe hacer `commit` explícito;
+las rutas de autenticación y futuras rutas. Quien escribe hace `commit` explícito;
 cerrar una sesión revierte lo no confirmado. Se usa `expire_on_commit=False`.
 `/health` conserva su dependencia Connection y su contrato original.
 
@@ -60,17 +68,20 @@ variables del sistema prevalecen sobre `.env` de la raíz. Se usa el objeto URL
 directamente, evitando problemas con contraseñas que contienen `%` u otros
 caracteres especiales. No se imprimen credenciales ni parámetros SQL.
 
-La revisión inicial `0001_create_users` crea solo `public.users` y sus constraints.
-Alembic administra además `public.alembic_version`. No crea un tipo enum SQL
-independiente. `downgrade` elimina exclusivamente `public.users`; Alembic conserva
-su tabla de versiones vacía al llegar a base.
+La revisión histórica `0001_create_users` permanece intacta. 0002 normaliza
+identidades y reemplaza la unicidad de email. 0003 crea audit_log y su función/trigger
+append-only. Alembic administra además `public.alembic_version`. No hay tipos enum
+SQL independientes. Al llegar a base se eliminan users y audit_log, y la tabla
+de versiones queda vacía. Al bajar solo a 0001 se conservan users pero se pierde
+la auditoría y la unicidad vuelve a ser exacta. No se recupera el casing original.
 
-La metadata y las operaciones de la revisión indican `public` explícitamente.
+Las conexiones y las operaciones de migración se limitan a `public`.
 La autogeneración excluye n8n y cualquier tabla fuera de la metadata. Por ello,
 eliminar un modelo no genera automáticamente un DROP para esa tabla: habrá que
 escribir y revisar la operación de migración. Tampoco se debe confiar en que
 autogenerate detecte cambios en los valores del CHECK de Role; deben revisarse
-expresamente. Nunca edites revisiones ya aplicadas: añade una nueva.
+expresamente. Lo mismo aplica a función/trigger de auditoría, gestionados manualmente
+en 0003 y probados contra PostgreSQL. Nunca edites revisiones ya aplicadas.
 
 Desde `backend/`, con PostgreSQL iniciado y `.env` configurado:
 
@@ -94,8 +105,8 @@ uv run alembic downgrade base
 uv run alembic upgrade head
 ```
 
-Revertir esta revisión elimina users y sus datos. No ejecutes este ciclo en
-desarrollo si necesitas conservar usuarios. No modifiques `n8n` para hacer una
+Revertir a base elimina usuarios y auditoría. No ejecutes este ciclo en
+desarrollo si necesitas conservarlos. No modifiques `n8n` para hacer una
 prueba ni borres volúmenes de Compose.
 
 En Docker, la imagen incluye Alembic y las migraciones:
@@ -112,7 +123,7 @@ si PostgreSQL ya está disponible. El proceso web nunca aplica migraciones al in
 ## Pruebas de integración
 
 Se usan PostgreSQL real y Alembic, sin SQLite, mocks de persistencia, create_all ni
-n8n. Las pruebas de salud siguen siendo unitarias.
+n8n. Las pruebas de salud, passwords y JWT puros son unitarias.
 
 Ejemplo de servidor descartable local, independiente de Compose y sus volúmenes:
 
@@ -151,12 +162,11 @@ Como protección, el nombre de la base debe ser `bec_guard_test` o empezar por
 en public o una revisión aplicada. Se permite solo `alembic_version` vacía para
 repetir la suite. Un nombre de test no sustituye estas comprobaciones.
 
-Las fixtures aplican la migración, permiten commits reales y limpian las filas de
-users después de cada test. Al terminar revierten a base. El test de migraciones
-confirma users + alembic_version, downgrade con desaparición de users, nuevo
-upgrade y ausencia de diferencias con la metadata. Los otros tests comprueban
-lectura desde otra sesión, los cuatro roles, UUID, defaults, timestamps, email
-duplicado e imposibilidad de escribir roles inválidos directamente en SQL.
+Las fixtures aplican las migraciones, permiten commits reales y limpian con
+TRUNCATE audit_log + users únicamente en esta BD descartable, sin quitar el trigger.
+Al terminar revierten a base. Los tests verifican head → 0001 → head, el ciclo hasta
+base, metadata match y fallo seguro ante colisiones. También comprueban User,
+bootstrap, login/me, JWT, cambios de rol/actividad, RBAC, eventos y triggers.
 Ejecuta la suite secuencialmente; no está diseñada para compartir la misma base
 entre ejecuciones concurrentes.
 

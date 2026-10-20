@@ -1,5 +1,11 @@
 # Contratos de API y análisis
 
+## Autenticación implementada (Fase 2B)
+
+`POST /api/auth/login` recibe JSON email/password y devuelve un access token.
+`GET /api/auth/me` requiere Bearer y devuelve únicamente la identidad segura.
+Contratos, códigos de error y ejemplos: [autenticación](authentication.md#contratos-http).
+
 ## Implementado: GET /health
 
 No requiere autenticación. Verifica FastAPI y conectividad real a PostgreSQL
