@@ -1,8 +1,9 @@
-# Persistencia de Fases 2A y 2B
+# Persistencia de BEC Guard
 
-El dominio persistente actual contiene `User` y `AuditLog`. Hay autenticación
-backend y RBAC, sin CRUD de usuarios ni otras entidades SQL. Los contratos de auth
-y el bootstrap se describen en [autenticación](authentication.md).
+El dominio persistente actual contiene `User`, `AuditLog`, `ExecutiveContact` y
+`Vendor`. Hay autenticación backend y RBAC, sin CRUD de usuarios. Los contratos de auth
+y el bootstrap se describen en [autenticación](authentication.md). Modelos, índices
+y transacciones de Fase 3 en [contexto organizacional](organizational-context.md).
 
 ## Modelo y decisiones
 
@@ -70,8 +71,9 @@ caracteres especiales. No se imprimen credenciales ni parámetros SQL.
 
 La revisión histórica `0001_create_users` permanece intacta. 0002 normaliza
 identidades y reemplaza la unicidad de email. 0003 crea audit_log y su función/trigger
-append-only. Alembic administra además `public.alembic_version`. No hay tipos enum
-SQL independientes. Al llegar a base se eliminan users y audit_log, y la tabla
+append-only. 0004 añade executive_contacts y vendors con unicidad case-insensitive.
+Alembic administra además `public.alembic_version`. No hay tipos enum
+SQL independientes. Al llegar a base se eliminan todas las tablas del dominio, y la tabla
 de versiones queda vacía. Al bajar solo a 0001 se conservan users pero se pierde
 la auditoría y la unicidad vuelve a ser exacta. No se recupera el casing original.
 
@@ -163,10 +165,12 @@ en public o una revisión aplicada. Se permite solo `alembic_version` vacía par
 repetir la suite. Un nombre de test no sustituye estas comprobaciones.
 
 Las fixtures aplican las migraciones, permiten commits reales y limpian con
-TRUNCATE audit_log + users únicamente en esta BD descartable, sin quitar el trigger.
-Al terminar revierten a base. Los tests verifican head → 0001 → head, el ciclo hasta
-base, metadata match y fallo seguro ante colisiones. También comprueban User,
-bootstrap, login/me, JWT, cambios de rol/actividad, RBAC, eventos y triggers.
+TRUNCATE audit_log + users + executive_contacts + vendors únicamente en esta BD
+descartable, sin quitar el trigger.
+Al terminar revierten a base. Los tests verifican head → 0003 → head,
+head → 0001 → head, el ciclo hasta base, metadata match y fallo seguro ante colisiones. También comprueban User,
+bootstrap, login/me, JWT, cambios de rol/actividad, RBAC, eventos y triggers;
+además CRUD, lookups, unicidad y atomicidad de contexto organizacional.
 Ejecuta la suite secuencialmente; no está diseñada para compartir la misma base
 entre ejecuciones concurrentes.
 

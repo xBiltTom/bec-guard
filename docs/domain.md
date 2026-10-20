@@ -1,9 +1,9 @@
 # Dominio mínimo
 
-Estas definiciones parten de Fase 0. User, Role y AuditLog tienen persistencia;
-Fase 2B incorpora autenticación y RBAC backend. Los demás conceptos siguen siendo
-futuros, sin endpoints CRUD ni reglas BEC implementadas. Los identificadores son UUID y
-las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC.
+Estas definiciones parten de Fase 0. User, Role, AuditLog, ExecutiveContact y Vendor
+tienen persistencia. Hay autenticación, RBAC y gestión backend del contexto
+organizacional; Email, EmailAnalysis y BECAlert siguen siendo futuros, sin reglas BEC.
+Los identificadores son UUID y las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC.
 
 ## Conceptos
 
@@ -11,12 +11,12 @@ las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC
 | --- | --- |
 | User | Identidad autenticable con id, name, email normalizado, password_hash Argon2id, role, is_active y timestamps. Exactamente un rol por usuario, consultado desde DB al autorizar. |
 | Role | Enum Python persistido como texto con CHECK. Cada usuario tiene un único rol; require_roles aplica RBAC sobre su rol actual. |
-| ExecutiveContact | Ejecutivo conocido: identificador, nombre, cargo, correos y dominios legítimos. Aporta contexto para reconocer suplantaciones. |
-| Vendor | Proveedor conocido: identificador, razón social, contactos y dominios legítimos. El tratamiento de cuentas bancarias se definirá cuando se implemente su gestión. |
+| ExecutiveContact | Ejecutivo conocido persistente: UUID, name, position, department nullable, un email legítimo normalizado, is_active y timestamps. Su dominio se podrá derivar del email. |
+| Vendor | Proveedor conocido persistente: UUID, name, un domain principal canónico, contact_email y bank_account_reference opcionales, is_active y timestamps. Referencia bancaria opaca, nunca auditada. |
 | Email | Correo normalizado para análisis: identificador, remitente, destinatarios, asunto, texto y fecha de recepción. Su parser y mecanismo de ingestión son futuros. |
 | EmailAnalysis | Ejecución de análisis de un Email: identificador, referencia al correo, fecha, versión del analizador y resultado neutral `BECAnalysisResult`. Un correo podrá tener varios análisis. |
 | BECAlert | Caso para revisión humana asociado a un análisis: identificador, estado operativo `status` (AlertStatus), veredicto humano `verdict` (AlertVerdict o `null`), responsable opcional y fechas. Su creación dependerá de una política futura, no de todo análisis automáticamente. |
-| AuditLog | Registro persistente append-only con UUID, actor nullable, snapshot de rol, acción, recurso nullable, IP nullable, details JSONB mínimos y fecha. Un trigger impide UPDATE/DELETE. Nunca copia passwords, hashes, JWT ni cuerpos de correo. |
+| AuditLog | Registro persistente append-only con UUID, actor nullable, snapshot de rol, acción, recurso nullable, IP nullable, details JSONB mínimos y fecha. Un trigger impide UPDATE/DELETE. Audita auth y cambios de contexto sin valores de campos. Nunca copia passwords, hashes, JWT, referencias bancarias ni cuerpos de correo. |
 
 Relaciones principales: User tiene exactamente un Role; Email tiene EmailAnalysis; BECAlert
 referencia EmailAnalysis y opcionalmente User como responsable; AuditLog permite
@@ -38,6 +38,18 @@ Fase 2B genera/verifica password_hash con Argon2id y política de 12–128 carac
 Email se normaliza con trim + lowercase; un índice UNIQUE sobre lower(email)
 impide duplicados por casing incluso mediante SQL directo. No hay registro público:
 solo un CLI interactivo para el primer ADMIN. Ver [autenticación](authentication.md).
+
+## Contexto organizacional persistente (Fase 3)
+
+ExecutiveContact y Vendor usan UUID v4, timestamps con timezone/UTC y actualización
+mediante SQLAlchemy, igual que User. La API normaliza textos; emails con trim +
+lowercase y dominios con trim + lowercase sin punto final. Índices UNIQUE sobre
+lower(email) y lower(domain) protegen identidades incluso mediante SQL directo.
+Solo se desactivan con is_active; no hay hard delete ni se reutiliza una identidad
+inactiva. Todos los roles leen; ADMIN y MANAGER crean/modifican. Los cambios y su
+AuditLog se confirman atómicamente. Los lookups internos devuelven coincidencias
+activas exactas por defecto, sin análisis BEC. Detalles, límites y contratos en
+[contexto organizacional](organizational-context.md).
 
 ## Enumeraciones previstas
 

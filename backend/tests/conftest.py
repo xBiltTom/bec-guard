@@ -86,7 +86,12 @@ def db_session(migrated_engine) -> Iterator[Session]:
             session.rollback()
             with migrated_engine.begin() as connection:
                 # Guarded, disposable test DB only. Do not disable the audit trigger.
-                connection.execute(text("TRUNCATE public.audit_log, public.users"))
+                connection.execute(
+                    text(
+                        "TRUNCATE public.audit_log, public.users, "
+                        "public.executive_contacts, public.vendors"
+                    )
+                )
 
 
 @pytest.fixture(scope="session")

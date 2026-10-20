@@ -158,6 +158,7 @@ haga TRUNCATE o cambie DDL. Los privilegios de producción quedan por definir.
 0001_create_users (histórica, intacta)
   -> 0002_auth_identity_constraints
   -> 0003_create_audit_log
+  -> 0004_organizational_context (contexto, ver su documentación)
 ```
 
 En la base descartable se prueba head → 0001 → head y también head → base → head,
@@ -173,7 +174,8 @@ el trigger ni debilitarlo para las pruebas.
 
 Quedan pendientes: frontend de auth, CRUD de usuarios, refresh, recuperación,
 MFA/OAuth, rate limiting/lockout y políticas concretas de permisos de funciones
-futuras. No se implementaron entidades ni funcionalidades de Fase 3.
+futuras. Fase 3 reutiliza estas dependencias y auditoría para
+[contexto organizacional](organizational-context.md), sin ampliar auth.
 
 Referencias: [FastAPI, pwdlib y JWT](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/),
 [pwdlib](https://frankie567.github.io/pwdlib/reference/pwdlib/),

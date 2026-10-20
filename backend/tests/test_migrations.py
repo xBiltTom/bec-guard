@@ -12,12 +12,16 @@ def test_upgrade_downgrade_upgrade_and_metadata_match(migrated_engine, migration
         return set(inspect(migrated_engine).get_table_names(schema="public"))
 
     # The session fixture already applied upgrade head to the clean test database.
-    assert tables() == {"users", "audit_log", "alembic_version"}
+    assert tables() == {"users", "audit_log", "executive_contacts", "vendors", "alembic_version"}
     with migrated_engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM public.alembic_version")) == (
-            "0003_create_audit_log"
+            "0004_organizational_context"
         )
 
+    migration_runner(command.downgrade, "0003_create_audit_log")
+    assert tables() == {"users", "audit_log", "alembic_version"}
+    migration_runner(command.upgrade, "head")
+    migration_runner(command.check)
     migration_runner(command.downgrade, "0001_create_users")
     assert tables() == {"users", "alembic_version"}
     with migrated_engine.connect() as connection:
@@ -32,7 +36,7 @@ def test_upgrade_downgrade_upgrade_and_metadata_match(migrated_engine, migration
         assert connection.scalar(text("SELECT count(*) FROM public.alembic_version")) == 0
 
     migration_runner(command.upgrade, "head")
-    assert tables() == {"users", "audit_log", "alembic_version"}
+    assert tables() == {"users", "audit_log", "executive_contacts", "vendors", "alembic_version"}
     inspector = inspect(migrated_engine)
     columns = inspector.get_columns("users", schema="public")
     assert {column["name"] for column in columns} == {
@@ -55,6 +59,19 @@ def test_upgrade_downgrade_upgrade_and_metadata_match(migrated_engine, migration
     assert indexes[0]["name"] == "uq_users_email_lower"
     assert indexes[0]["unique"] is True
     assert indexes[0]["expressions"] == ["lower(email::text)"]
+    for table, field, index_name in [
+        ("executive_contacts", "email", "uq_executive_contacts_email_lower"),
+        ("vendors", "domain", "uq_vendors_domain_lower"),
+    ]:
+        context_indexes = inspector.get_indexes(table, schema="public")
+        assert len(context_indexes) == 1
+        assert context_indexes[0]["name"] == index_name
+        assert context_indexes[0]["unique"] is True
+        assert context_indexes[0]["expressions"] == [f"lower({field}::text)"]
+        for column in inspector.get_columns(table, schema="public"):
+            if column["name"] in {"created_at", "updated_at"}:
+                assert column["type"].timezone is True
+                assert column["nullable"] is False
     migration_runner(command.check)
 
 

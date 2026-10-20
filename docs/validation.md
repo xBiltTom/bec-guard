@@ -168,10 +168,55 @@ las revisiones. No se modificó 0001_create_users ni se tocaron objetos de n8n.
 
 El secreto JWT local se generó aleatoriamente dentro de `.env` ignorado con permisos
 600, sin imprimirlo. Los tests generan sus propias claves; CI no requiere secrets
-adicionales. El CI remoto nuevo de 2B queda pendiente del push que realizará el
-usuario; el CI anterior de 2A ya figura arriba como SUCCESS.
+adicionales. El CI remoto de Fase 2B sobre
+`84a9592caf2ecf2b7e577e8fea46f23b7f72c2f7` terminó en **SUCCESS**,
+según la ejecución posterior al push confirmada por el usuario.
 
 Se mantienen las limitaciones documentadas en [autenticación](authentication.md):
 sin refresh/revocación por sesión, recuperación, MFA, CRUD, frontend de auth ni
 rate limiting/lockout. El trigger protege UPDATE/DELETE, no acciones DDL de un
 propietario. Las pruebas siguen siendo secuenciales y sobre una BD descartable.
+
+## Fase 3: contexto organizacional
+
+Se partió de `main` limpio en `84a9592`. Se añadieron únicamente ExecutiveContact,
+Vendor y sus APIs backend, usando la autenticación, RBAC y auditoría existentes.
+
+| Comprobación | Resultado |
+| --- | --- |
+| Suite completa con PostgreSQL 18 | **130 pruebas aprobadas**, sin omisiones: 44 unitarias y 86 de integración; 71 casos nuevos respecto a las 59 de Fase 2B. |
+| Contexto | Crear, consultar, listar, PATCH parcial, normalización, validación, paginación y desactivar/reactivar correctos; sin DELETE. |
+| Identidades | Duplicados por casing rechazados mediante API y SQL directo; conflictos de POST/PATCH devuelven 409 sin detalles SQL. |
+| Lookups | Coincidencia canónica exacta; inactivos excluidos por defecto. |
+| RBAC | ADMIN/MANAGER escriben; los cuatro roles leen. ANALYST/AUDITOR reciben 403 al escribir; sin token/inactivo 401. Cambiar rol en DB afecta al mismo token. |
+| Auditoría | Ocho acciones de contexto, actor/rol/recurso correctos; details solo contiene nombres de campos modificados. Sin valores bancarios, emails, passwords o tokens. |
+| Atomicidad | Un fallo real de FK al insertar AuditLog revierte CREATE y PATCH de ambos recursos; no se convierte en 409. |
+| Append-only | Los tests existentes siguen verificando INSERT permitido y UPDATE/DELETE rechazados con SQLSTATE 55000. Trigger de 0003 intacto. |
+| Migración 0004 | Base limpia → head; head → 0003 → head; head → 0001 → head y head → base → head aprobados exclusivamente en PostgreSQL descartable. |
+| Metadata/constraints | Tablas, índices UNIQUE funcionales, timestamps con timezone y alembic check correctos. Revisiones 0001–0003 sin modificar. |
+| Backend | uv sync --frozen, Ruff check y format --check aprobados. Sin dependencias nuevas. |
+| Frontend | npm ci y lint/format:check/build aprobados; ningún archivo frontend modificado. |
+| CI | actionlint válido; workflow y PostgreSQL efímero sin cambios. CI remoto de Fase 3 pendiente; no se hizo push. |
+| Docker | Compose config válido; imagen backend construida, upgrade y alembic check desde esa imagen correctos; cuatro servicios healthy. |
+
+Un proceso Uvicorn real conectado a la BD descartable pasó login, creación de ambos
+recursos, consulta, desactivación, normalización y 401/403. Con el mismo JWT, cambiar
+el rol en PostgreSQL cambió la autorización. Los eventos conservaron la IP del peer
+127.0.0.1 aunque se envió X-Forwarded-For falso. No hubo credenciales, token ni
+referencia bancaria en details o logs. OpenAPI contiene 11 operaciones en 7 paths:
+las 3 de salud/auth anteriores y 8 de contexto; ninguna operación DELETE.
+
+En desarrollo se aplicó únicamente upgrade de 0003 a 0004, sin datos de prueba.
+La comparación de metadata de n8n antes/después fue idéntica: **160 tablas,
+1270 columnas y 1429 constraints**. No se modificaron n8n, sus workflows,
+Compose, frontend ni CI. Los ciclos destructivos se limitaron a la BD de tests.
+
+TestClient, conexiones a PostgreSQL, Uvicorn y Docker se validaron fuera del sandbox
+por sus restricciones de sockets. No quedaron validaciones locales pendientes.
+La validación remota de esta fase corresponderá al próximo push del usuario.
+
+Limitaciones y decisiones menores: dominios ASCII/punycode sin DNS; un email por
+ejecutivo y un dominio por proveedor; listados como arrays; PATCH sin cambios no
+se audita; updated_at usa SQLAlchemy y SQL directo debe gestionarlo. Ver
+[contexto organizacional](organizational-context.md). No hay motor BEC, análisis,
+scoring, LLM, frontend de gestión ni workflows: **Fase 4 no fue implementada**.

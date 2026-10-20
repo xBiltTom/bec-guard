@@ -6,6 +6,12 @@
 `GET /api/auth/me` requiere Bearer y devuelve únicamente la identidad segura.
 Contratos, códigos de error y ejemplos: [autenticación](authentication.md#contratos-http).
 
+## Contexto organizacional implementado (Fase 3)
+
+GET/POST de `/api/executives` y `/api/vendors`, GET/PATCH por UUID, paginación,
+RBAC y respuestas: [contratos de contexto](organizational-context.md#contratos-http).
+No hay DELETE ni endpoints de análisis BEC.
+
 ## Implementado: GET /health
 
 No requiere autenticación. Verifica FastAPI y conectividad real a PostgreSQL

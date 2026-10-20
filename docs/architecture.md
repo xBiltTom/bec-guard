@@ -5,8 +5,8 @@
 BEC Guard es un proyecto académico de Ingeniería de Software para detectar y gestionar
 Business Email Compromise (BEC) / fraude ejecutivo. Se construye incrementalmente.
 
-**Fases 0, 1, 2A y 2B:** scaffold, persistencia de User y AuditLog con Alembic,
-autenticación backend JWT/Argon2id y RBAC. Se conserva la pantalla de salud y la
+**Fases 0, 1, 2A, 2B y 3:** scaffold, persistencia con Alembic, autenticación
+JWT/Argon2id, contexto organizacional con RBAC y auditoría atómica. Se conserva la pantalla de salud y la
 infraestructura local. No hay frontend de autenticación, análisis BEC ni IA.
 
 ## Arquitectura
@@ -18,7 +18,7 @@ de negocio. No se necesitan microservicios, Redis ni colas en esta etapa.
 ```mermaid
 flowchart LR
     Browser[React + TypeScript] -->|GET /health| API[FastAPI]
-    API -->|SQLAlchemy: SELECT 1| DB[(PostgreSQL)]
+    API -->|SQLAlchemy: salud y persistencia| DB[(PostgreSQL)]
     N8N[n8n: sin workflows] -->|Datos internos: esquema n8n| DB
 ```
 
@@ -30,8 +30,8 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 | Componente | Responsabilidad |
 | --- | --- |
 | Frontend | Presentación y comunicación REST. Hoy muestra disponibilidad del backend; posteriormente permitirá revisión humana. |
-| FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Hoy ejecuta una consulta de conectividad con SQLAlchemy. |
-| PostgreSQL | User y AuditLog en public; datos internos de n8n en su propio esquema. Las demás entidades son futuras. |
+| FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Gestiona autenticación, contexto organizacional y auditoría; conserva la salud de infraestructura. |
+| PostgreSQL | User, AuditLog, ExecutiveContact y Vendor en public; datos internos de n8n en su propio esquema. Las demás entidades son futuras. |
 | n8n | Orquestar recepción y llamadas a FastAPI en el futuro. Hoy solo se provisiona su instancia vacía. |
 | LangChain (futuro) | Facilitar análisis semántico dentro del backend, detrás de una interfaz propia. No determina el contrato del dominio. |
 | Adaptadores LLM (futuros) | Traducir solicitudes y respuestas de OpenAI, Gemini, Groq u otros al contrato neutral de BEC Guard. |
@@ -40,9 +40,9 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 
 - `api/`: rutas HTTP.
 - `core/`: configuración y conexión a la base de datos.
-- `schemas/`: contratos Pydantic públicos implementados; hoy únicamente salud.
-- `models/`: Base común, User, Role y AuditLog.
-- `services/`: autenticación, bootstrap y auditoría.
+- `schemas/`: contratos Pydantic de salud, auth y contexto organizacional.
+- `models/`: Base común, User, Role, AuditLog, ExecutiveContact y Vendor.
+- `services/`: autenticación, bootstrap, auditoría y servicios/lookups de contexto.
 - `scripts/`: comando interactivo del primer ADMIN.
 - `migrations/` y `alembic.ini`: historial y configuración de Alembic.
 
@@ -54,7 +54,7 @@ será responsable de `commit`; cerrar la sesión revierte transacciones pendient
 No se añade repository pattern ni se exponen rutas CRUD de usuarios.
 
 El proceso web no ejecuta `create_all` ni migraciones. Alembic reutiliza Settings
-para su conexión y gestiona users, audit_log y alembic_version en public mediante
+para su conexión y gestiona las tablas del dominio y alembic_version en public mediante
 un comando explícito. La autogeneración excluye otros esquemas y tablas ajenas
 a su metadata. El downgrade de validación se ejecuta únicamente en PostgreSQL de
 prueba, separado de desarrollo y sin n8n. Consulta [persistencia](persistence.md).
@@ -84,6 +84,10 @@ solo para la API y se configura en el entorno. No hay refresh ni flujos de n8n.
 La metadata usa el esquema por defecto con search_path=public para evitar
 diferencias falsas de reflexión de claves foráneas. Las migraciones siguen
 calificando public y excluyendo n8n. Ver [autenticación](authentication.md).
+
+Fase 3 añade ExecutiveContact y Vendor con GET/POST/PATCH autenticados, permisos
+de escritura ADMIN/MANAGER y lookups exactos activos. Recurso y auditoría comparten
+un commit. Ver [contexto organizacional](organizational-context.md).
 
 Los volúmenes `postgres_data` y `n8n_data` persisten los datos y la configuración de
 n8n. Sus claves de cifrado se generan y conservan en su volumen. No se exportan al

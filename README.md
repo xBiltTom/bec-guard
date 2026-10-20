@@ -5,14 +5,15 @@ Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combin
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fases 0, 1, 2A y 2B.** Hay persistencia de User y AuditLog,
-autenticación backend con Argon2id y JWT, RBAC reutilizable y una pantalla mínima
+**Estado actual: Fases 0, 1, 2A, 2B y 3.** Hay persistencia de User, AuditLog,
+ExecutiveContact y Vendor, autenticación backend con Argon2id y JWT, APIs de
+contexto organizacional protegidas por RBAC y auditoría atómica, y una pantalla mínima
 que comprueba la salud de FastAPI y PostgreSQL. No hay frontend de autenticación.
 Todavía no se analizan correos ni se generan alertas.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
-exactamente un rol por usuario en el MVP. Fase 3 sigue pendiente.
+exactamente un rol por usuario en el MVP. Fase 4 sigue pendiente.
 
 ## Arquitectura y stack
 
@@ -38,6 +39,7 @@ Documentación:
 - [Contratos de salud y análisis futuro](docs/api-contracts.md)
 - [Persistencia, migraciones y base de pruebas](docs/persistence.md)
 - [Autenticación, bootstrap ADMIN, JWT, RBAC y auditoría](docs/authentication.md)
+- [Contexto organizacional, endpoints, permisos y lookups](docs/organizational-context.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
 ## Requisitos
@@ -154,8 +156,8 @@ uv run ruff format --check .
 ```
 
 La suite verifica salud, passwords, JWT, bootstrap, login/me, RBAC, persistencia,
-migraciones y auditoría append-only. Las pruebas de integración usan PostgreSQL
-real y requieren `TEST_DATABASE_URL`, una variable independiente de
+migraciones, contexto organizacional y auditoría append-only. Las pruebas de
+integración usan PostgreSQL real y requieren `TEST_DATABASE_URL`, una variable independiente de
 `.env`, apuntando a una base de pruebas vacía. Sin ella se omiten las de integración.
 Consulta [cómo levantar esa base y ejecutar la suite completa](docs/persistence.md#pruebas-de-integración).
 
@@ -213,8 +215,9 @@ uv run alembic check
 
 Para crear una revisión: `uv run alembic revision --autogenerate -m "describe change"`.
 Revisa el archivo generado antes de aplicarlo. Para revertir la última revisión:
-`uv run alembic downgrade -1`. Revertir 0003 elimina la auditoría; llegar a base
-elimina también users. El ciclo destructivo se valida solo en la base de test.
+`uv run alembic downgrade -1`. Revertir 0004 elimina ejecutivos/proveedores;
+revertir 0003 elimina la auditoría; llegar a base elimina también users. El ciclo
+destructivo se valida solo en la base de test.
 No se modifica el esquema `n8n`. Más detalles en [persistencia](docs/persistence.md).
 
 ## Desarrollo de aplicaciones en el host
@@ -279,11 +282,11 @@ docker compose logs --tail=80 frontend
 ```text
 backend/
   app/
-    api/           # Ruta /health
+    api/           # Salud, auth y contexto organizacional
     core/          # Settings y SQLAlchemy
-    models/        # Base declarativa, User, Role y AuditLog
-    schemas/       # Respuesta de salud
-    services/      # Bootstrap, autenticación y auditoría; sin motor BEC
+    models/        # Base, User, Role, AuditLog, ExecutiveContact y Vendor
+    schemas/       # Contratos HTTP separados
+    services/      # Auth, auditoría, contexto y lookups; sin motor BEC
     scripts/       # CLI create_admin
     main.py
   tests/
@@ -306,14 +309,15 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente para Fase 3 y posteriores
+## Pendiente para Fase 4 y posteriores
 
-Fase 2B añade únicamente autenticación backend, RBAC y auditoría. Quedan pendientes
-frontend de autenticación, CRUD de usuarios, recuperación, refresh tokens y gestión de
-ejecutivos y proveedores, ingestión de correos y parser MIME, reglas BEC, scoring,
+Fase 3 añade gestión backend de ejecutivos/proveedores, lookups exactos y auditoría
+atómica. Quedan pendientes frontend de autenticación y gestión, CRUD de usuarios,
+recuperación, refresh tokens, ingestión de correos y parser MIME, reglas BEC, scoring,
 LangChain, adaptadores LLM y prompts, revisión de alertas y workflows de n8n.
 También quedan fuera dashboards, reportes, Gmail, IMAP y Microsoft Graph.
 
-Solo hay endpoints de auth y salud; no hay CRUD ni permisos de negocio todavía.
-Las demás entidades y los contratos de análisis siguen siendo diseño conceptual.
+Las APIs de contexto ofrecen GET/POST/PATCH; todos los roles leen y solo ADMIN/
+MANAGER escriben. No existe DELETE. Las entidades de correo/análisis/alertas y
+los contratos de análisis siguen siendo diseño conceptual.
 No se han agregado endpoints de negocio ficticios ni integraciones IA.

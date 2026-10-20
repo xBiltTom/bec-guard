@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.auth import router as auth_router
 from app.api.health import router as health_router
+from app.api.organizational_context import router as context_router
 from app.core.config import AuthSettings, Settings
 from app.core.database import create_database_engine, create_session_factory
 
@@ -39,6 +40,7 @@ def create_app(
 
     application.include_router(health_router)
     application.include_router(auth_router)
+    application.include_router(context_router)
     return application
 
 
