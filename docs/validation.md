@@ -433,7 +433,8 @@ Guía de producto, sesión y límites: [frontend](frontend.md).
 Inicio en main, HEAD `14217eeb9bf60f95dce9ec18e127299a6196a8af`; cinco commits
 previos de Fase 7 revisados. **CI #8 SUCCESS**, confirmado por el usuario para ese
 commit. El único archivo preexistente sin seguimiento era `skills-lock.json` y se
-conservó fuera de los commits. No se hizo push ni se ejecutó CI remoto de Fase 8.
+conservó fuera de los commits. Durante esa implementación no se hizo push ni se
+ejecutó CI remoto de Fase 8; una ejecución remota posterior se registra al final.
 
 8A añadió el evaluador local y 19 pruebas con fixtures artificiales. Antes del
 holdout pasaron las 451 pruebas backend entonces existentes, Ruff, validación
@@ -482,3 +483,23 @@ eliminaron, la base de la suite quedó en Alembic base y PostgreSQL descartable 
 detuvo. Desarrollo no recibió usuarios, correos, alertas ni contexto de demostración
 en esta fase. No hubo gasto LLM. No se implementó Fase 9, conectores de correo real,
 notificaciones, ML o tuning post-holdout. [Reportes](reporting.md).
+
+## Corrección del test de cola tras el CI de Fase 8
+
+El usuario compartió un fallo remoto posterior a los cuatro commits: 49/50 pruebas
+frontend aprobadas; `alert queue has loading and empty states` quedó en Cargando.
+La suite original volvió a pasar localmente en Node 24, consistente con una carrera
+intermitente. El resolver del mock se inicializaba dentro de fetch, mientras el
+test solo esperaba el encabezado antes de llamar una función inicialmente vacía.
+El encabezado puede renderizarse antes de ejecutar el efecto que inicia la petición.
+
+La promesa controlada ahora existe antes del render. El test espera explícitamente
+la petición de alertas, verifica loading, resuelve dentro de act y comprueba el
+estado vacío junto con la desaparición de loading. No se aumentan timeouts ni se
+introducen retries o cambios en la aplicación.
+
+Validado en contenedor temporal sin red con Node **24.22.1** y Vitest **5.0.5**:
+test afectado con `--repeats 20`, suite completa **50/50**, lint, format:check y
+build aprobados. El bundle conserva el mismo hash. Solo cambian el test y este
+registro; no se ejecutó holdout ni LLM y no hubo push. `skills-lock.json` continúa
+sin seguimiento. El resultado del siguiente CI remoto requiere su propia ejecución.

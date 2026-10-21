@@ -1,5 +1,5 @@
 import { it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AppRoutes } from '../App';
@@ -123,17 +123,14 @@ it('alert filters request backend filters', async () => {
 });
 it('alert queue has loading and empty states', async () => {
   sessionStorage.setItem(tokenKey, 't');
-  let finish: (r: Response) => void = () => {};
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((url: string) =>
-      url.endsWith('/auth/me')
-        ? Promise.resolve(response(user))
-        : new Promise<Response>((resolve) => {
-            finish = resolve;
-          }),
-    ),
+  let finish!: (r: Response) => void;
+  const pendingAlerts = new Promise<Response>((resolve) => {
+    finish = resolve;
+  });
+  const fetch = vi.fn((url: string) =>
+    url.endsWith('/auth/me') ? Promise.resolve(response(user)) : pendingAlerts,
   );
+  vi.stubGlobal('fetch', fetch);
   render(
     <MemoryRouter initialEntries={['/alerts']}>
       <AuthProvider>
@@ -142,9 +139,19 @@ it('alert queue has loading and empty states', async () => {
     </MemoryRouter>,
   );
   await screen.findByRole('heading', { name: 'Alertas' });
+  // Rendering the heading does not guarantee that the resource effect ran.
+  await waitFor(() =>
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/alerts?limit=25&offset=0',
+      expect.any(Object),
+    ),
+  );
   expect(screen.getByRole('status')).toHaveTextContent('Cargando');
-  finish(response([]));
+  await act(async () => {
+    finish(response([]));
+  });
   await screen.findByText('No hay alertas con estos filtros.');
+  expect(screen.queryByRole('status')).not.toBeInTheDocument();
 });
 it('detail safely renders email and separates signals', async () => {
   setup('/alerts/alert-1');
