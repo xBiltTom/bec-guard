@@ -95,7 +95,12 @@ export function Alerts() {
       ) : !resource.data?.length ? (
         <EmptyState>No hay alertas con estos filtros.</EmptyState>
       ) : (
-        <div className="table-wrap">
+        <div
+          className="table-wrap"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabla de alertas"
+        >
           <table>
             <thead>
               <tr>

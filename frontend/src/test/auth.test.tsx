@@ -1,6 +1,6 @@
 import { dashboard, response } from './fixtures';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { AppRoutes } from '../App';
@@ -114,4 +114,28 @@ describe('session', () => {
       ),
     );
   });
+});
+
+it('does not restore an expired session from an older me response', async () => {
+  sessionStorage.setItem(tokenKey, 'old-session');
+  let finish: (value: Response) => void = () => {};
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    ),
+  );
+  renderApp();
+  await act(async () => {
+    sessionStorage.removeItem(tokenKey);
+    window.dispatchEvent(new Event('bec-session-expired'));
+  });
+  await screen.findByLabelText('Correo electrónico');
+  await act(async () => {
+    finish(response(user));
+  });
+  expect(screen.queryByText('Lucía')).not.toBeInTheDocument();
 });

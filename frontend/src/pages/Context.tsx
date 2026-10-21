@@ -136,7 +136,12 @@ export function ContextPage({ kind }: { kind: Kind }) {
             : 'No hay proveedores registrados.'}
         </EmptyState>
       ) : (
-        <div className="table-wrap">
+        <div
+          className="table-wrap"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabla de contexto organizacional"
+        >
           <table>
             <thead>
               <tr>

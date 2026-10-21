@@ -15,7 +15,7 @@ Los identificadores son UUID y las fechas se intercambiarán como ISO 8601 con z
 | Vendor | Proveedor conocido persistente: UUID, name, un domain principal canónico, contact_email y bank_account_reference opcionales, is_active y timestamps. Referencia bancaria opaca, nunca auditada. |
 | Email | Correo persistente normalizado: UUID, Message-ID único, thread_id opcional, remitente, Reply-To, Return-Path, destinatarios JSONB, asunto, body_text, Authentication-Results, received_at e ingested_at. Sin análisis ni labels de evaluación. |
 | EmailAnalysis | Análisis actual de un Email, máximo uno por UNIQUE email_id: status COMPLETED/ERROR, scores, riesgo/tipo nullable, señales JSONB, resumen/recomendación, proveedor/modelo, versión, error_code y fecha. Sin raw output ni prompt. |
-| BECAlert | Alerta persistente, máximo una por análisis: UUID, analysis_id UNIQUE/FK RESTRICT, status OPEN inicial, verdict null, assigned_to FK RESTRICT nullable, resolution nullable, created_at/updated_at y closed_at nullable. alert-v1 crea solo para COMPLETED >=70; sin transiciones HITL. |
+| BECAlert | Alerta persistente, máximo una por análisis: UUID, analysis_id UNIQUE/FK RESTRICT, status OPEN inicial, verdict null, assigned_to FK RESTRICT nullable, resolution nullable, created_at/updated_at y closed_at nullable. alert-v1 crea solo para COMPLETED >=70; Fase 7 implementa claim/release/resolve humanos. |
 | AuditLog | Registro persistente append-only con UUID, actor nullable, snapshot de rol, acción, recurso nullable, IP nullable, details JSONB mínimos y fecha. Un trigger impide UPDATE/DELETE. Audita auth, cambios de contexto e ingestión sin contenido del email. Nunca copia passwords, hashes, JWT, referencias bancarias ni cuerpos de correo. |
 
 Relaciones principales: User tiene exactamente un Role; Email tiene EmailAnalysis; BECAlert
@@ -90,7 +90,7 @@ El índice created_at DESC/id sirve al listado sin filtros complejos.
 
 La alerta y BEC_ALERT_CREATED comparten transacción con el análisis exitoso.
 Análisis COMPLETED antiguos recuperan alertas faltantes al solicitar analyze;
-sin backfill masivo. No hay PATCH/DELETE, asignación, veredicto o cierre por API.
+sin backfill masivo. No hay PATCH/DELETE; claim/release/resolve añaden revisión humana.
 Automatización usa actor/rol null en eventos de email/análisis/alerta; humanos
 conservan su User/rol. [Contratos y orquestación](alerts-and-orchestration.md).
 
@@ -123,9 +123,9 @@ Representa el resultado de la revisión humana, independiente del estado operati
 | CONFIRMED_BEC | La revisión humana confirma fraude BEC. |
 | FALSE_POSITIVE | La revisión humana descarta el fraude. |
 
-Mientras no exista una decisión humana, `verdict = null`; no se añade un valor
-`PENDING`. El cierre administrativo cambia `status`, pero no borra ni reemplaza
-el veredicto ni su auditoría. `CLOSED` por sí solo no determina un resultado.
+Mientras no exista una decisión humana, `verdict = null`; no se añade `PENDING`.
+Resolver asigna simultáneamente CLOSED y un veredicto, conservando su auditoría.
+CLOSED por sí solo no distingue entre fraude confirmado y falso positivo.
 
 Ejemplos válidos:
 
@@ -136,9 +136,13 @@ Ejemplos válidos:
 | CLOSED | CONFIRMED_BEC |
 | CLOSED | FALSE_POSITIVE |
 
-Los ejemplos no definen una matriz completa de combinaciones permitidas.
-Las transiciones exactas, condiciones de cierre y permisos quedan para HITL en
-Fase 7. Fase 6 solo crea OPEN/verdict null y ofrece lectura.
+La migración 0008 exige OPEN sin responsable/veredicto/resolución/closed_at;
+UNDER_REVIEW con responsable y los otros tres null; CLOSED con los cuatro presentes.
+OPEN → claim → UNDER_REVIEW → resolve → CLOSED; release vuelve a OPEN.
+No hay reopen. ANALYST opera su asignación; ADMIN/MANAGER supervisan otras;
+AUDITOR es lector. La resolución es texto trim de 1–2000 caracteres y no se copia
+a AuditLog. Claim/release/resolve usan bloqueo de fila y auditoría atómica;
+repeticiones sin cambio no duplican eventos. Ver [frontend](frontend.md).
 
 ### BECType
 

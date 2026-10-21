@@ -37,7 +37,12 @@ export function Emails() {
       ) : !resource.data?.length ? (
         <EmptyState>Aún no hay correos recibidos.</EmptyState>
       ) : (
-        <div className="table-wrap">
+        <div
+          className="table-wrap"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabla de correos"
+        >
           <table>
             <thead>
               <tr>

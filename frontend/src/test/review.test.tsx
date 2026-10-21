@@ -231,3 +231,24 @@ it('analyst cannot act on someone else review', async () => {
     screen.queryByRole('button', { name: 'Confirmar BEC' }),
   ).not.toBeInTheDocument();
 });
+it('decision dialog cycles focus and closes without resolving', async () => {
+  const fetch = setup('/alerts/alert-1', 'ANALYST', {
+    ...alert,
+    status: 'UNDER_REVIEW',
+    assigned_to: user.id,
+  });
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Confirmar BEC' }),
+  );
+  const close = screen.getByRole('button', { name: 'Cerrar diálogo' });
+  close.focus();
+  await userEvent.tab({ shift: true });
+  expect(screen.getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+  await userEvent.tab();
+  expect(close).toHaveFocus();
+  await userEvent.click(close);
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(fetch.mock.calls.some(([url]) => url.endsWith('/resolve'))).toBe(
+    false,
+  );
+});

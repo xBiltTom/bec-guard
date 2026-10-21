@@ -160,14 +160,27 @@ def test_hitl_constraints(db_session, review_setup, changes):
     db_session.rollback()
 
 
-def test_review_audit_rollback(api_client, db_session, migrated_engine, review_setup):
+@pytest.mark.parametrize(
+    "operation,action,verdict",
+    [
+        ("claim", "BEC_ALERT_CLAIMED", None),
+        ("release", "BEC_ALERT_RELEASED", None),
+        ("resolve", "BEC_ALERT_CONFIRMED", "CONFIRMED_BEC"),
+        ("resolve", "BEC_ALERT_FALSE_POSITIVE", "FALSE_POSITIVE"),
+    ],
+)
+def test_review_audit_rollback(
+    api_client, db_session, migrated_engine, review_setup, operation, action, verdict
+):
     alert, headers, _, _ = review_setup
+    if operation != "claim":
+        assert api_client.post(endpoint(alert, "claim"), headers=headers).status_code == 200
     with migrated_engine.begin() as c:
         c.execute(
             text(
-                """CREATE FUNCTION public.reject_review_test() RETURNS trigger
+                f"""CREATE FUNCTION public.reject_review_test() RETURNS trigger
                     LANGUAGE plpgsql AS $$ BEGIN
-                    IF NEW.action = 'BEC_ALERT_CLAIMED' THEN RAISE EXCEPTION 'test'; END IF;
+                    IF NEW.action = '{action}' THEN RAISE EXCEPTION 'test'; END IF;
                     RETURN NEW; END; $$"""
             )
         )
@@ -178,12 +191,19 @@ def test_review_audit_rollback(api_client, db_session, migrated_engine, review_s
             )
         )
     try:
-        assert api_client.post(endpoint(alert, "claim"), headers=headers).status_code == 503
-        db_session.expire_all()
-        assert db_session.get(BECAlert, alert.id).status == "OPEN"
-        assert not list(
-            db_session.scalars(select(AuditLog).where(AuditLog.action == "BEC_ALERT_CLAIMED"))
+        assert (
+            api_client.post(
+                endpoint(alert, operation),
+                headers=headers,
+                json={"verdict": verdict, "resolution": "Private resolution"} if verdict else None,
+            ).status_code
+            == 503
         )
+        db_session.expire_all()
+        assert db_session.get(BECAlert, alert.id).status == (
+            "OPEN" if operation == "claim" else "UNDER_REVIEW"
+        )
+        assert not list(db_session.scalars(select(AuditLog).where(AuditLog.action == action)))
     finally:
         db_session.rollback()
         with migrated_engine.begin() as c:
@@ -231,3 +251,39 @@ def test_audit_read_roles(api_client, db_session, account, review_setup, role):
             == []
         )
         assert api_client.get("/api/audit?limit=101", headers=headers).status_code == 400
+
+
+@pytest.mark.parametrize("field", ["assigned_to", "verdict", "resolution", "closed_at"])
+def test_closed_requires_all_decision_fields(api_client, db_session, review_setup, field):
+    alert, headers, _, _ = review_setup
+    api_client.post(endpoint(alert, "claim"), headers=headers)
+    assert (
+        api_client.post(
+            endpoint(alert, "resolve"),
+            headers=headers,
+            json={"verdict": "FALSE_POSITIVE", "resolution": "Verified locally"},
+        ).status_code
+        == 200
+    )
+    with pytest.raises(IntegrityError):
+        db_session.execute(
+            text(f"UPDATE public.bec_alerts SET {field}=NULL WHERE id=:id"), {"id": alert.id}
+        )
+        db_session.commit()
+    db_session.rollback()
+
+
+def test_dashboard_reflects_human_decision(api_client, review_setup):
+    alert, headers, _, _ = review_setup
+    api_client.post(endpoint(alert, "claim"), headers=headers)
+    assigned = api_client.get("/api/alerts?status=UNDER_REVIEW", headers=headers).json()
+    assert assigned[0]["assigned_to_name"]
+    api_client.post(
+        endpoint(alert, "resolve"),
+        headers=headers,
+        json={"verdict": "CONFIRMED_BEC", "resolution": "Verified"},
+    )
+    data = api_client.get("/api/dashboard/summary", headers=headers).json()
+    assert data["alerts"] == {"open": 0, "under_review": 0, "closed": 1}
+    assert data["verdicts"] == {"confirmed_bec": 1, "false_positive": 0}
+    assert sum(data["risk_distribution"].values()) == data["analyses_completed"]

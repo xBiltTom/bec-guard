@@ -226,6 +226,6 @@ MEDIUM ataques detectados solo por semántica. El corpus es sintético y los sco
 no son probabilidades calibradas. No hubo llamadas reales pagadas para esta fase:
 no se afirma calidad ni disponibilidad de un modelo externo particular.
 El cuerpo se envía sin truncarlo: modelos con contexto insuficiente pueden fallar.
-Sin análisis de adjuntos, DNS, conectores, revisión humana ni frontend. Fase 6
-implementa BECAlert automática y orquestación Webhook n8n, sin cambiar estas
-políticas ni ajustar scoring con dataset.
+Sin análisis de adjuntos, DNS ni conectores. Fase 6 implementa BECAlert automática
+y orquestación Webhook n8n; Fase 7 añade frontend y revisión humana, sin cambiar
+estas políticas ni ajustar scoring con dataset. Ver [frontend](frontend.md).

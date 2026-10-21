@@ -1,8 +1,8 @@
-# Alertas y orquestación — Fase 6
+# Alertas, revisión humana y orquestación
 
 FastAPI conserva reglas, contexto, LangChain, scoring y política de alertas. n8n
 solo orquesta correo normalizado → ingestión → análisis → respuesta. No hay broker,
-workers nuevos, frontend, HITL, proveedor de correo ni notificaciones.
+workers nuevos, proveedor de correo ni notificaciones. Fase 7 añade frontend e HITL.
 
 ## BECAlert y alert-v1
 
@@ -14,8 +14,8 @@ nullable. CHECKs permiten OPEN/UNDER_REVIEW/CLOSED, verdict null/CONFIRMED_BEC/
 FALSE_POSITIVE y exigen closed_at null en OPEN. No existe PENDING.
 
 Una alerta nueva tiene OPEN, verdict/assigned_to/resolution/closed_at null.
-UNDER_REVIEW, CLOSED y los veredictos están declarados como dominio, pero no hay
-operaciones que los asignen en esta fase. No existe máquina de estados ni DELETE.
+Fase 7 añade claim/release/resolve humanos y 0008 exige coherencia por estado.
+No hay DELETE ni reopen.
 El índice created_at DESC + id sirve al listado real; no se añade índice por status
 sin un filtro que lo consuma. PK y UNIQUE analysis_id cubren identidad e idempotencia.
 
@@ -39,12 +39,12 @@ Repetir un resultado completado con alerta no repite eventos ni gasto semántico
 
 GET /api/alerts y GET /api/alerts/{alert_id} exigen JWT humano. Los cuatro roles
 activos leen; sin token/inactivo 401, UUID inválido 400, alerta inexistente 404.
-No existen PATCH, DELETE, assign, confirm, false-positive ni close.
+No existen PATCH/DELETE; Fase 7 usa POST claim/release/resolve.
 
 Lista: array con id, analysis_id, email_id, status, verdict, assigned_to, risk_score,
 risk_level, bec_type, sender_name, sender_email, subject, received_at, created_at y
 updated_at. Selecciona columnas explícitas sin cargar body_text. Orden created_at
-DESC, id ASC; limit 50 por defecto (1–100), offset 0 (>=0), sin filtros complejos.
+DESC, id ASC; limit 50 por defecto (1–100), offset 0 (>=0), con filtros status/risk_level/bec_type/assigned_to/analysis_id.
 
 Detalle: datos de alerta, resolution, closed_at y EmailAnalysisResponse anidado en
 analysis. No incluye cuerpo del correo; Email detail sigue disponible por separado.
@@ -151,5 +151,18 @@ credencial/ejecución a través de mecanismos propios de n8n.
 Holdout y dataset intactos: sin evaluación, inspección manual ni tuning. La
 regresión development solo se ejecuta como smoke del motor existente. Límites:
 proceso síncrono, key única sin scopes dinámicos, red local, eliminación periódica
-(no instantánea) de datos temporales. No hay email provider real, notificaciones,
-frontend, HITL, asignación, veredicto o cierre; corresponden a fases posteriores.
+(no instantánea) de datos temporales. No hay proveedor de correo real ni notificaciones. Frontend y revisión humana están en Fase 7.
+
+
+## HITL humano (Fase 7)
+
+La automatización conserva scope exclusivo ingest/analyze; jamás claim/release/resolve.
+0008 exige OPEN con assigned_to/verdict/resolution/closed_at null, UNDER_REVIEW con
+assigned_to presente y resto null, CLOSED con los cuatro presentes. No hay cambios
+de catálogo ni backfill. Claim y decisiones se serializan por fila de BECAlert.
+ADMIN/MANAGER/ANALYST escriben con JWT; ANALYST solo libera/resuelve su asignación,
+supervisores cualquiera. Resolución trim obligatoria 1–2000, fecha de cierre UTC.
+Idempotencia no repite eventos; CLOSED no puede cambiar de decisión ni reabrirse.
+Los eventos humanos CLAIMED/RELEASED/CONFIRMED/FALSE_POSITIVE no incluyen resolución,
+score ni contenido; actor es User obligatorio y mutación/auditoría son atómicas.
+[Contratos](api-contracts.md) · [aplicación React](frontend.md).

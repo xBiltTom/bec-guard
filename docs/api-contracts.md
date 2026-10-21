@@ -137,13 +137,14 @@ límites y pruebas sin red: [motor BEC](bec-analysis.md).
 ## GET /api/alerts y GET /api/alerts/{alert_id}
 
 Todos los roles autenticados leen. Lista: array paginado con id, analysis_id,
-email_id, status, verdict, assigned_to, risk_score, risk_level, bec_type, sender_name,
+email_id, status, verdict, assigned_to, assigned_to_name nullable, risk_score, risk_level, bec_type, sender_name,
 sender_email, subject, received_at, created_at y updated_at. No carga ni devuelve
-body_text. Orden created_at DESC/id ASC; limit default 50 (1–100), offset default 0.
+body_text. Filtros opcionales status, risk_level, bec_type, assigned_to y analysis_id
+(este último permite enlazar correo con su alerta). Orden created_at DESC/id ASC; limit default 50 (1–100), offset default 0.
 
 Detalle: campos de alerta, resolution/closed_at nullable y EmailAnalysisResponse
 anidado en analysis, sin cuerpo del correo. 404 si no existe; UUID inválido 400;
-sin token/usuario inactivo 401. Sin PATCH/DELETE ni acciones HITL.
+sin token/usuario inactivo 401. Sin PATCH/DELETE; HITL usa los POST siguientes.
 
 ## POST /api/automation/emails
 
@@ -168,3 +169,42 @@ timestamp. La auditoría humana conserva User y rol actual.
 
 Workflow, política alert-v1, transacciones y privacidad:
 [alertas y orquestación](alerts-and-orchestration.md).
+
+
+## Revisión humana de alertas (Fase 7)
+
+POST /api/alerts/{alert_id}/claim, /release y /resolve: solo JWT humano
+ADMIN/MANAGER/ANALYST; AUDITOR 403, automation key no sustituye JWT (401).
+Devuelven AlertDetailResponse 200; UUID inválido 400, recurso inexistente 404.
+
+- claim: OPEN → UNDER_REVIEW, assigned_to=actor. Mismo actor ya asignado: 200 sin
+  otro evento; otro responsable o CLOSED: 409.
+- release: UNDER_REVIEW → OPEN, assignee null. ANALYST solo sobre propia asignación;
+  ADMIN/MANAGER cualquiera. Ajena por ANALYST: 403. OPEN: 200 idempotente; CLOSED409.
+- resolve body: `{verdict: "CONFIRMED_BEC" | "FALSE_POSITIVE", resolution: string}`,
+  trim 1–2000 caracteres, sin campos extra. Requiere UNDER_REVIEW; ANALYST propia
+  asignación y supervisores cualquiera. Conserva assignee, asigna CLOSED y fecha
+  UTC. OPEN409, ajena403. CLOSED idéntica es 200 sin evento, cambio posterior409.
+
+SELECT FOR UPDATE evita claims/decisiones incompatibles. Mutación y acción
+BEC_ALERT_CLAIMED/RELEASED/CONFIRMED/FALSE_POSITIVE comparten transacción.
+AuditLog no guarda la resolución ni evidencia del email; fallo de persistencia/audit
+revierte el intento y responde 503 genérico. No hay reopen ni cambios de veredicto.
+
+## GET /api/dashboard/summary
+
+Todos los roles autenticados. Agregados SQL reales, sin cache: emails_total,
+analyses_completed, analyses_error; alerts con open/under_review/closed; verdicts
+con confirmed_bec/false_positive; risk_distribution LOW/MEDIUM/HIGH/CRITICAL de
+análisis completados; bec_type_distribution array `{bec_type,count}` excluye null;
+alerts_last_7_days array `{date,count}` con siete fechas UTC ordenadas y ceros.
+No contiene cuerpos ni anotaciones del dataset; no es evaluación formal de precisión.
+
+## GET /api/audit
+
+Solo ADMIN/AUDITOR (MANAGER/ANALYST403). Read-only. limit default50/max100, offset0;
+filtros opcionales action y resource_type exactos (máximo64 caracteres).
+Orden created_at DESC/id ASC. Array con id, actor_user_id/name/role nullable, action,
+resource_type/id nullable, ip_address, created_at y details nullable, todos campos
+persistidos existentes; sin añadir contenido sensible. El actor_name es el nombre
+actual de User, role es snapshot del evento. No hay mutaciones ni bypass del trigger.

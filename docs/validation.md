@@ -376,3 +376,54 @@ Se mantiene el aviso de deprecación upstream de google-genai ya documentado.
 No se implementó frontend, HITL, asignación, veredicto, cierre, Gmail/IMAP/Graph ni
 notificaciones. Alcance y límites: [alertas y orquestación](alerts-and-orchestration.md)
 y [guía operativa n8n](../n8n/README.md).
+
+## Fase 7: frontend operativo y revisión humana
+
+Inicio en main, HEAD `8c101797a7c5d1b9ffbb1809a7b61d16fab8a920`; cuatro commits
+previos de Fase 6 revisados. **CI #7 SUCCESS**, confirmado por el usuario. Existía
+`skills-lock.json` sin seguimiento antes de modificar; se conservó fuera de los
+commits del producto. Se usó la skill local frontend-design para composición y
+revisión visual, y react-best-practices para hooks/componentes. Sin push.
+
+7A pasó 45 tests relevantes y la suite completa de 424 tests; 7B pasó 6 tests UI;
+7C pasó 17 y 7D pasó 36. 7E amplía rollback de cada acción, invariantes CLOSED,
+agregados tras resolver, carrera de sesión y ciclo de foco.
+
+| Validación final | Resultado |
+| --- | --- |
+| Backend, PostgreSQL 18 real | **432 aprobadas**, sin omisiones: 231 unitarias y 201 de integración. **29 nuevas** frente a Fase 6. |
+| HITL | Claim propio idempotente/ajeno409, carrera 200+409, release propio/supervisor, ANALYST ajeno403, ambos veredictos, resolución trim/longitud, CLOSED idempotente o conflicto y UTC. |
+| Integridad/atomicidad | 0008 exige campos coherentes en OPEN/UNDER_REVIEW/CLOSED. FK/UNIQUE previos intactos. Fallo real de auditoría revierte claim, release, confirmación y falso positivo. Trigger append-only conservado. |
+| Soporte al producto | Filtros status/risk_level/bec_type/assigned_to/analysis_id, responsable por nombre, agregados reales/ceros/siete días UTC y audit read ADMIN/AUDITOR con filtros/paginación. |
+| Migraciones | head → 0007 → head, head → base → head y ciclos históricos aprobados exclusivamente en BD descartable; Alembic check sin diferencias. 0001–0007 intactas. |
+| Ruff | Check y format --check aprobados: 92 archivos. Sin nuevas dependencias backend ni cambio de lockfile. |
+| Frontend | **38 tests aprobados** con Vitest/Testing Library/jsdom: sesión, auth, roles, dashboard, alertas, HITL, cuerpo inerte, análisis/retry, contexto, audit, errores y vacíos. |
+| Toolchain frontend | npm ci, lint, format:check y build aprobados. Runtime nuevo: solo React Router; tooling de test solo devDependencies. Bundle JS **297.98 KB / 92.10 KB gzip**, CSS 13.56 KB / 3.79 KB gzip; sin chart library/state manager/UI framework. |
+| CI | Frontend ahora ejecuta npm test -- --run. actionlint aprobado. Backend mantiene PostgreSQL efímero; CI no requiere n8n, browser, secrets ni LLM externo. Equivalente local aprobado; sin CI remoto de Fase 7 durante este trabajo. |
+| Revisión visual | Chromium temporal fuera del repo: login, shell, dashboard, cola, detalle, diálogo, correos, contexto y auditoría a **1440×900, 1024×768 y 375×800**. Capturas revisadas; sin overflow del documento. Tablas con scroll contenido. |
+| Teclado/accesibilidad | Labels, headers, badges con texto, foco visible, skip link, feedback status/alert. Dialog nativo con Escape, ciclo Tab/Shift+Tab y restauración de foco; controles de tablas enfocables. Sin auditoría WCAG formal. |
+| Navegador con HTTP real | Login → dashboard → claim/release → CONFIRMED_BEC y FALSE_POSITIVE → CLOSED; análisis manual/enlace a alerta, contexto creado/editado/desactivado y auditoría persistida. Logout elimina token. API con PostgreSQL 18 descartable y analizador inyectado solo en proceso temporal. |
+| Seguridad UI | sessionStorage exclusivamente; 401 limpia sesión, 403 conserva. Respuesta antigua de /me no restaura sesión borrada. Sin token/password en DOM/logs ni keys de automatización/LLM en bundle. Body con script/URL queda texto inerte, sin links activos ni dangerouslySetInnerHTML. |
+| Docker/Compose | Config válido; backend/frontend reconstruidos y cuatro servicios healthy. En desarrollo solo upgrade 0007→0008; sin datos humanos demo ni usuarios ficticios. Proxy frontend llega a APIs reales protegidas (401 sin JWT). |
+| n8n | 2.44.4 healthy/readiness200. Workflow canónico importado y publicado de nuevo con CLI, instancia reiniciada y webhook real comprobado. JSON/importador/Compose sin cambios respecto a Fase 6. |
+| Automation smoke real | Message-ID existente →200/created=false sin otro EMAIL_INGESTED. Webhook → análisis ERROR/LLM_NOT_CONFIGURED →503, riesgo null/sin alerta, actor null. Sin llamadas reales a OpenAI/Gemini/Groq. HITL no admite automation key. |
+| Esquema n8n | Comparación exacta previa/posterior: **160 tablas, 1270 columnas y 1429 constraints**, definiciones idénticas. No se modificó estructura ni políticas de privacidad. |
+| Dataset | Validador estructural de 140 casos aprobado. Development smoke 98: legítimos70, 0–26/media3.83; BEC28, 15–90/media62.64; 21 hard negatives LOW. Scoring y dataset sin diff; holdout no evaluado, inspeccionado ni usado para tuning. |
+| Secretos | Secretos locales reales ausentes de archivos versionables y bundle; no se imprimieron valores. Key de automatización sigue solo backend/n8n. |
+
+La revisión visual corrigió columnas comprimidas en móvil y acercó identidad/asunto
+al score del detalle. El navegador real detectó salida de foco desde el dialog;
+se añadió ciclo explícito y test de regresión, y se repitió el recorrido real con
+éxito. Un intento de Vitest dentro del sandbox no pudo iniciar workers; la misma
+suite fuera del sandbox pasó, sin ocultar errores ni cambiar timeouts.
+
+La suite backend deja la BD de tests en base; la BD adicional de navegador y sus
+credenciales temporales se eliminaron y los servidores temporales se detuvieron.
+PostgreSQL descartable quedó detenido. Desarrollo conserva únicamente la evidencia
+sintética heredada del smoke de Fase 6 y su retry ERROR de esta validación.
+No se crearon allí ejecutivos/proveedores/alertas/usuarios de demo. No se gastaron
+tokens LLM. Se conserva la deprecación upstream google-genai ya documentada.
+
+No se añadieron reportes, evaluación holdout/métricas finales, proveedor de correo,
+notificaciones, refresh, CRUD de usuarios ni funciones fuera de Fase 7.
+Guía de producto, sesión y límites: [frontend](frontend.md).

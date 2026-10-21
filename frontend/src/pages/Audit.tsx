@@ -73,7 +73,12 @@ function AuditList() {
       ) : !resource.data?.length ? (
         <EmptyState>No hay eventos con estos filtros.</EmptyState>
       ) : (
-        <div className="table-wrap">
+        <div
+          className="table-wrap"
+          tabIndex={0}
+          role="region"
+          aria-label="Tabla de auditoría"
+        >
           <table>
             <thead>
               <tr>

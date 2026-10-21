@@ -25,9 +25,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     };
     window.addEventListener('bec-session-expired', clear);
-    if (sessionStorage.getItem(tokenKey)) {
+    const restoringToken = sessionStorage.getItem(tokenKey);
+    if (restoringToken) {
       api<User>('/auth/me', { signal: controller.signal })
-        .then(setUser)
+        .then((current) => {
+          if (
+            !controller.signal.aborted &&
+            sessionStorage.getItem(tokenKey) === restoringToken
+          )
+            setUser(current);
+        })
         .catch((e: unknown) => {
           if (!controller.signal.aborted && sessionStorage.getItem(tokenKey))
             setError(

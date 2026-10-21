@@ -5,24 +5,24 @@ Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combin
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fases 0–6.** Hay persistencia de User, AuditLog,
+**Estado actual: Fases 0–7.** Hay persistencia de User, AuditLog,
 ExecutiveContact, Vendor, Email, EmailAnalysis y BECAlert; autenticación Argon2id/JWT,
 contexto organizacional, ingestión y análisis BEC híbrido con RBAC y auditoría
 atómica, parser MIME y dataset sintético.
-Se conserva una pantalla mínima
-que comprueba la salud de FastAPI y PostgreSQL. No hay frontend de autenticación.
+La aplicación React permite login, dashboard, cola, evidencia, revisión humana,
+correos, contexto y auditoría por rol.
 Se ingieren, consultan y analizan correos; HIGH/CRITICAL crean alertas OPEN.
 n8n orquesta el flujo mediante un webhook autenticado, sin proveedor de correo real.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
-exactamente un rol por usuario en el MVP. Frontend e HITL quedan para Fase 7.
+exactamente un rol por usuario en el MVP. Fase 7 implementa frontend e HITL con cierre auditable.
 
 ## Arquitectura y stack
 
 React + TypeScript + Vite consume FastAPI mediante REST. FastAPI concentra la lógica
 del negocio y accede a PostgreSQL mediante SQLAlchemy y psycopg. Pydantic valida
-la configuración y respuestas. Alembic versiona el esquema del dominio. n8n será
+la configuración y respuestas. Alembic versiona el esquema del dominio. n8n es
 un orquestador de flujos, sin trasladar allí las reglas del dominio.
 
 Versiones base: Python 3.14, Node.js 24 LTS, React 19, Vite 8, TypeScript 6,
@@ -38,9 +38,9 @@ Redis ni workers adicionales. Se usa CSS sencillo sin bibliotecas de componentes
 
 Documentación:
 
-- [Arquitectura y flujo futuro](docs/architecture.md)
+- [Arquitectura y flujo operativo](docs/architecture.md)
 - [Dominio, entidades, roles y enums](docs/domain.md)
-- [Contratos de salud y análisis](docs/api-contracts.md)
+- [Contratos de APIs y revisión humana](docs/api-contracts.md)
 - [Persistencia, migraciones y base de pruebas](docs/persistence.md)
 - [Autenticación, bootstrap ADMIN, JWT, RBAC y auditoría](docs/authentication.md)
 - [Contexto organizacional, endpoints, permisos y lookups](docs/organizational-context.md)
@@ -48,6 +48,7 @@ Documentación:
 - [Dataset sintético, splits y validación](docs/dataset.md)
 - [Motor BEC, reglas, LangChain, scoring y ERROR/retry](docs/bec-analysis.md)
 - [Alertas, API de automatización y orquestación](docs/alerts-and-orchestration.md)
+- [Frontend, sesión y revisión humana](docs/frontend.md)
 - [Workflow n8n: importar, publicar y probar](n8n/README.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
@@ -179,6 +180,7 @@ Frontend, desde `frontend/`:
 
 ```bash
 npm ci
+npm test -- --run
 npm run lint
 npm run format:check
 npm run build
@@ -229,7 +231,7 @@ uv run alembic check
 
 Para crear una revisión: `uv run alembic revision --autogenerate -m "describe change"`.
 Revisa el archivo generado antes de aplicarlo. Para revertir la última revisión:
-`uv run alembic downgrade -1`. Revertir 0007 elimina alertas; 0006 elimina análisis; 0005 elimina emails;
+`uv run alembic downgrade -1`. Revertir 0008 relaja constraints HITL; 0007 elimina alertas; 0006 elimina análisis; 0005 elimina emails;
 revertir 0004 elimina ejecutivos/proveedores;
 revertir 0003 elimina la auditoría; llegar a base elimina también users. El ciclo
 destructivo se valida solo en la base de test.
@@ -272,7 +274,7 @@ llamada; ERROR se reintenta con el mismo POST y UUID del análisis. Los fallos L
 se persisten como ERROR con riesgo null y HTTP 502 (503 sin configuración), nunca
 LOW. Un COMPLETED >=70 crea una BECAlert OPEN con verdict null, sin ejecutar la
 recomendación. GET /api/alerts y GET /api/alerts/{id} permiten lectura a todos los
-roles autenticados; sin PATCH/DELETE ni transiciones HITL.
+roles autenticados. Claim/release/resolve implementan HITL, sin PATCH/DELETE.
 
 ## Orquestar con n8n
 
@@ -387,14 +389,23 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente para Fase 7 y posteriores
+## Pendiente tras Fase 7
 
 Fase 6 añade BECAlert automática, lectura de alertas, API key acotada y workflow
-Webhook n8n. Quedan pendientes frontend funcional, HITL, CRUD de usuarios,
+Webhook n8n. Fase 7 añade frontend funcional e HITL. Quedan pendientes CRUD de usuarios,
 recuperación, refresh tokens, conectores de email y notificaciones.
-También quedan fuera dashboards, reportes, Gmail, IMAP y Microsoft Graph.
+También quedan fuera reportes, Gmail, IMAP y Microsoft Graph.
 
 Las APIs de contexto ofrecen GET/POST/PATCH; ADMIN/MANAGER escriben. Emails ofrecen
 POST/GET, con ingestión también para ANALYST. Todos los roles leen; no hay DELETE.
-EmailAnalysis, BECAlert y workflow n8n están implementados. No hay frontend de
-análisis ni asignación, veredicto o cierre de alertas.
+EmailAnalysis, BECAlert, workflow n8n y frontend están implementados. La revisión
+humana permite claim, release y cierre con veredicto y resolución auditables.
+
+## Usar la aplicación
+
+Con Compose healthy y migraciones en head, abre http://localhost:5173. Inicia sesión
+con un User creado mediante el CLI de bootstrap existente. Dashboard y cola leen
+datos reales; abre una alerta, toma la revisión y registra una resolución para
+confirmar BEC o falso positivo. El cierre conserva evidencia y AuditLog. No hay
+registro público ni usuarios demo. Consulta [frontend](docs/frontend.md) y
+[contratos HITL](docs/api-contracts.md) para permisos y comportamiento de sesión.

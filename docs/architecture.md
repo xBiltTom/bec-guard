@@ -5,11 +5,11 @@
 BEC Guard es un proyecto académico de Ingeniería de Software para detectar y gestionar
 Business Email Compromise (BEC) / fraude ejecutivo. Se construye incrementalmente.
 
-**Fases 0–6:** scaffold, persistencia con Alembic, autenticación
+**Fases 0–7:** scaffold, persistencia con Alembic, autenticación
 JWT/Argon2id, contexto, ingestión de emails, parser MIME y auditoría atómica.
 Fase 5 añade reglas, LangChain multiproveedor, scoring y EmailAnalysis persistido.
-Se conserva la pantalla de salud y la infraestructura local. No hay frontend de
-autenticación/análisis ni HITL. Fase 6 añade alertas automáticas y Webhook n8n.
+Fase 6 añade alertas automáticas y Webhook n8n. Fase 7 incorpora aplicación React
+autenticada, dashboard, cola, HITL, correos, contexto y auditoría.
 
 ## Arquitectura
 
@@ -19,7 +19,7 @@ de negocio. No se necesitan microservicios, Redis ni colas en esta etapa.
 
 ```mermaid
 flowchart LR
-    Browser[React + TypeScript] -->|GET /health| API[FastAPI]
+    Browser[React + TypeScript] -->|REST + JWT: producto y revisión| API[FastAPI]
     API -->|SQLAlchemy: salud y persistencia| DB[(PostgreSQL)]
     N8N[n8n: Webhook normalizado] -->|API key acotada: ingest + analyze| API
     N8N -->|Datos internos: esquema n8n| DB
@@ -32,7 +32,7 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 
 | Componente | Responsabilidad |
 | --- | --- |
-| Frontend | Presentación y comunicación REST. Hoy muestra disponibilidad del backend; posteriormente permitirá revisión humana. |
+| Frontend | Presentación y comunicación REST. Login/sessionStorage, dashboard, evidencia, revisión humana y operaciones por rol. |
 | FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Gestiona autenticación, contexto organizacional y auditoría; conserva la salud de infraestructura. |
 | PostgreSQL | User, AuditLog, ExecutiveContact, Vendor, Email, EmailAnalysis y BECAlert en public; datos internos de n8n en su propio esquema. |
 | n8n | Webhook autenticado → ingestión/análisis mediante API key acotada → ALERT/NO_ALERT/ERROR. Sin reglas BEC ni scoring propios. |
@@ -137,7 +137,7 @@ flowchart TD
 FastAPI será responsable de combinar señales y validar el resultado; un proveedor
 LLM no decidirá por sí solo acciones financieras ni sustituirá la revisión humana.
 El scoring hybrid-v1 y la política automática alert-v1 ya existen; recepción real
-de correo, notificaciones y revisión humana siguen pendientes.
+de correo y notificaciones siguen pendientes. Revisión humana ya existe en Fase 7.
 Cambiar de proveedor no deberá modificar consumidores REST ni entidades de negocio.
 Fase 5 incorpora prompts/SDKs con consumidores reales; no se implementan agentes.
 
@@ -146,3 +146,14 @@ Fase 5 incorpora prompts/SDKs con consumidores reales; no se implementan agentes
 - [FastAPI: contenedores](https://fastapi.tiangolo.com/deployment/docker/).
 - [Vite: inicio y requisitos](https://vite.dev/guide/).
 - [n8n: instalación Docker y PostgreSQL](https://docs.n8n.io/hosting/installation/docker/).
+
+## Aplicación y HITL (Fase 7)
+
+React Router organiza vistas protegidas; fetch añade Bearer y AbortSignal sin un SDK
+adicional. Estado local/context de sesión, CSS plano y gráficos CSS con datos del
+backend. No hay state manager, framework UI ni datos estáticos de producción.
+GET /api/dashboard/summary agrega SQL, GET /api/audit limita ADMIN/AUDITOR. Filtros de
+alertas siguen siendo columnas SQL. Claim/release/resolve bloquean la fila de alerta
+y confirman mutación más AuditLog en un commit. 0008 refuerza invariantes por estado;
+no se cambian migraciones históricas, motor BEC, n8n ni políticas de scoring.
+Ver [frontend](frontend.md) y [dominio](domain.md).
