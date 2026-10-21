@@ -2,7 +2,8 @@
 
 El backend analiza un Email persistido y conserva un EmailAnalysis actual. Es un
 monolito síncrono: reglas + contexto activo → semántica LangChain → scoring híbrido
-→ resultado y auditoría en un commit. No crea alertas ni ejecuta recomendaciones.
+→ resultado y auditoría en un commit. Fase 6 añade BECAlert OPEN para COMPLETED
+>=70 en esa misma transacción, sin ejecutar recomendaciones.
 
 ## Motor determinista (`det-v1`)
 
@@ -148,7 +149,8 @@ forma array, thresholds y consistencia entre status y resultado.
 
 No guarda prompt, raw output, key, copia del cuerpo ni labels del dataset.
 Un Email tiene como máximo un análisis actual; no hay historial de ejecuciones.
-COMPLETED se devuelve sin invocar LLM ni generar otra auditoría. ERROR puede
+COMPLETED se devuelve sin invocar LLM; Fase 6 recupera una alerta faltante cuando
+corresponde y audita solo esa creación. Con alerta existente no repite auditoría. ERROR puede
 reintentarse y actualiza el mismo UUID, recalculando con el contexto actual.
 Un COMPLETED no se invalida al cambiar contexto/modelo/política: no existe endpoint
 de reanálisis forzado en este MVP.
@@ -166,6 +168,10 @@ timestamp; details=null. No se auditan scores, señales, subject, sender ni body
 Un fallo de auditoría revierte tanto creación como retry, conservando un ERROR
 anterior cuando existe. Errores de persistencia responden 503 genérico.
 El trigger append-only histórico permanece intacto.
+
+Fase 6 añade BEC_ALERT_CREATED en la misma transacción para COMPLETED >=70.
+Las llamadas de automatización reutilizan este servicio con actor null y una API
+key acotada, sin sustituir RBAC/JWT humano. Ver [alertas y orquestación](alerts-and-orchestration.md).
 
 ## API y ERROR
 
@@ -220,5 +226,6 @@ MEDIUM ataques detectados solo por semántica. El corpus es sintético y los sco
 no son probabilidades calibradas. No hubo llamadas reales pagadas para esta fase:
 no se afirma calidad ni disponibilidad de un modelo externo particular.
 El cuerpo se envía sin truncarlo: modelos con contexto insuficiente pueden fallar.
-Sin análisis de adjuntos, DNS, conectores, BECAlert, revisión humana, frontend,
-workflows n8n ni funcionalidades de Fase 6.
+Sin análisis de adjuntos, DNS, conectores, revisión humana ni frontend. Fase 6
+implementa BECAlert automática y orquestación Webhook n8n, sin cambiar estas
+políticas ni ajustar scoring con dataset.

@@ -11,7 +11,7 @@ from app.api.email_analysis import get_analyzer_factory
 from app.core.config import LLMSettings
 from app.core.database import create_session_factory
 from app.core.tokens import create_access_token
-from app.models import AuditLog, Email, EmailAnalysis, ExecutiveContact, Role, User
+from app.models import AuditLog, BECAlert, Email, EmailAnalysis, ExecutiveContact, Role, User
 from app.schemas.analysis import SemanticAssessment
 from app.schemas.email import EmailIngestRequest
 from app.services.email_analysis import analyze_email, create_semantic_analyzer
@@ -109,6 +109,9 @@ def test_completed_analysis_persisted_idempotent_and_audited(
     assert event.actor_user_id == account.id and event.actor_role == Role.ANALYST
     assert event.resource_type == "email_analysis" and event.resource_id == stored.id
     assert event.details is None and event.ip_address != "198.51.100.10"
+    events = list(db_session.scalars(select(AuditLog)))
+    assert {e.action for e in events} == {"EMAIL_INGESTED", "EMAIL_ANALYZED", "BEC_ALERT_CREATED"}
+    assert all(e.actor_user_id == account.id and e.actor_role == Role.ANALYST for e in events)
     assert not any(
         value in repr(event.details) + caplog.text for value in [email.subject, email.body_text]
     )
@@ -288,6 +291,7 @@ def test_low_result_has_no_bec_type(api_client, analysis_setup, db_session):
     result = api_client.post(f"/api/emails/{email.id}/analyze", headers=headers).json()
     assert result["status"] == "COMPLETED" and result["risk_level"] == "LOW"
     assert result["bec_type"] is None
+    assert db_session.scalar(select(func.count()).select_from(BECAlert)) == 0
 
 
 def test_concurrent_analysis_spends_once(analysis_setup, migrated_engine, account):
@@ -313,6 +317,9 @@ def test_concurrent_analysis_spends_once(analysis_setup, migrated_engine, accoun
             fake.release.set()
         assert first.result(timeout=10) == second.result(timeout=10)
     assert fake.calls == 1
+    with create_session_factory(migrated_engine)() as session:
+        assert session.scalar(select(func.count()).select_from(EmailAnalysis)) == 1
+        assert session.scalar(select(func.count()).select_from(BECAlert)) == 1
 
 
 @pytest.mark.parametrize(

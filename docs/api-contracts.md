@@ -36,10 +36,12 @@ Fallo de BD: HTTP 503, sin detalles de conexión:
 Implementado en Fase 5. Bearer obligatorio; ADMIN/MANAGER/ANALYST pueden ejecutar,
 AUDITOR recibe 403. No recibe body: carga el Email persistido y contexto activo,
 aplica reglas, semántica LangChain y scoring híbrido, y guarda EmailAnalysis con
-auditoría atómica. Nunca crea BECAlert ni ejecuta recomendaciones.
+auditoría atómica. Desde Fase 6, COMPLETED >=70 garantiza BECAlert OPEN/verdict null
+en la misma transacción. No ejecuta recomendaciones.
 
 HTTP 200: EmailAnalysisResponse COMPLETED, creado o reutilizado. Si ya existe
-COMPLETED no llama otra vez al proveedor ni genera otro evento. Si existe ERROR,
+COMPLETED no llama otra vez al proveedor. Si le falta alerta y score>=70, la crea
+con BEC_ALERT_CREATED; si ya existe, no repite eventos. Si existe ERROR,
 recalcula y actualiza la misma fila/UUID. UNIQUE email_id y bloqueo de Email
 serializan solicitudes concurrentes; no hay historial de ejecuciones.
 
@@ -131,3 +133,38 @@ Se consulta siempre User actual en PostgreSQL para autorización.
 
 La API puede arrancar sin claves LLM. Configuración, seguridad, prompt injection,
 límites y pruebas sin red: [motor BEC](bec-analysis.md).
+
+## GET /api/alerts y GET /api/alerts/{alert_id}
+
+Todos los roles autenticados leen. Lista: array paginado con id, analysis_id,
+email_id, status, verdict, assigned_to, risk_score, risk_level, bec_type, sender_name,
+sender_email, subject, received_at, created_at y updated_at. No carga ni devuelve
+body_text. Orden created_at DESC/id ASC; limit default 50 (1–100), offset default 0.
+
+Detalle: campos de alerta, resolution/closed_at nullable y EmailAnalysisResponse
+anidado en analysis, sin cuerpo del correo. 404 si no existe; UUID inválido 400;
+sin token/usuario inactivo 401. Sin PATCH/DELETE ni acciones HITL.
+
+## POST /api/automation/emails
+
+Exige X-BEC-Automation-Key, independiente del JWT humano. Body EmailIngestRequest.
+Respuesta `{created: boolean, email: EmailDetailResponse}`. Message-ID exacto nuevo:
+201/true. Existente: 200/false, mismo Email sin sobrescritura ni otra auditoría.
+El POST humano conserva 409. La carrera UNIQUE recupera el ganador persistido.
+
+## POST /api/automation/emails/{email_id}/analyze
+
+Misma autenticación. Reutiliza analyze_email y devuelve
+`{analysis: EmailAnalysisResponse, alert_id: UUID|null}`. COMPLETED HIGH/CRITICAL
+incluye alert_id; LOW/MEDIUM y ERROR lo dejan null. HTTP 200 COMPLETED, 502 fallo
+LLM, 503 falta de configuración, 404 Email inexistente. ERROR nunca significa LOW.
+Retry explícito actualiza el mismo análisis; COMPLETED reutiliza resultado/alerta.
+
+La API key se carga lazy, SecretStr y compare_digest. Ausente/corta (<32) en
+configuración: 503 Automation unavailable. Header ausente/incorrecto: 401 genérico.
+No autoriza ninguna otra ruta; JWT no sustituye esta key. Auditoría del pipeline
+automatizado usa actor_user_id/actor_role null, details null y recurso/acción/IP/
+timestamp. La auditoría humana conserva User y rol actual.
+
+Workflow, política alert-v1, transacciones y privacidad:
+[alertas y orquestación](alerts-and-orchestration.md).

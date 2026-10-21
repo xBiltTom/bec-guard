@@ -94,13 +94,18 @@ EXECUTIONS_DATA_SAVE_ON_PROGRESS=false
 EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS=false
 EXECUTIONS_DATA_PRUNE=true
 EXECUTIONS_DATA_MAX_AGE=24
+EXECUTIONS_DATA_PRUNE_HARD_DELETE_INTERVAL=1
+EXECUTIONS_DATA_HARD_DELETE_BUFFER=0
 ```
 
 El workflow también desactiva guardado de éxitos/errores, ejecuciones manuales y
-progreso. El correo y header circulan en memoria durante la ejecución; no se
-conservan como execution data terminada ni pinData. No se guarda raw MIME.
-El pruning limita metadata restante a 24 horas de forma periódica, no inmediata.
-Esta configuración no borra datos históricos anteriores que ya existieran.
+progreso. n8n guarda un registro inicial temporal incluso con save=none y marca su
+eliminación al terminar; en SQL puede seguir indicando running aunque deletedAt
+ya esté definido. El hard-delete periódico se ejecuta cada minuto, sin buffer
+adicional, para borrar ese registro y su payload. No se conserva como historial
+visible ni pinData. Una ejecución activa sí puede conservar datos temporales.
+No se guarda raw MIME. El pruning limita metadata restante a 24 horas de forma
+periódica, no inmediata. No se hace una eliminación masiva de datos históricos.
 
 Para depurar: respuesta HTTP sanitizada y su error_code, estado/readiness de n8n,
 IDs persistidos en FastAPI y logs operativos sin payload. El editor puede mostrar

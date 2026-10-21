@@ -5,11 +5,11 @@
 BEC Guard es un proyecto académico de Ingeniería de Software para detectar y gestionar
 Business Email Compromise (BEC) / fraude ejecutivo. Se construye incrementalmente.
 
-**Fases 0–5:** scaffold, persistencia con Alembic, autenticación
+**Fases 0–6:** scaffold, persistencia con Alembic, autenticación
 JWT/Argon2id, contexto, ingestión de emails, parser MIME y auditoría atómica.
 Fase 5 añade reglas, LangChain multiproveedor, scoring y EmailAnalysis persistido.
 Se conserva la pantalla de salud y la infraestructura local. No hay frontend de
-autenticación/análisis ni alertas.
+autenticación/análisis ni HITL. Fase 6 añade alertas automáticas y Webhook n8n.
 
 ## Arquitectura
 
@@ -21,7 +21,8 @@ de negocio. No se necesitan microservicios, Redis ni colas en esta etapa.
 flowchart LR
     Browser[React + TypeScript] -->|GET /health| API[FastAPI]
     API -->|SQLAlchemy: salud y persistencia| DB[(PostgreSQL)]
-    N8N[n8n: sin workflows] -->|Datos internos: esquema n8n| DB
+    N8N[n8n: Webhook normalizado] -->|API key acotada: ingest + analyze| API
+    N8N -->|Datos internos: esquema n8n| DB
 ```
 
 Los cuatro servicios se ejecutan con Docker Compose. Los puertos publicados solo
@@ -33,8 +34,8 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 | --- | --- |
 | Frontend | Presentación y comunicación REST. Hoy muestra disponibilidad del backend; posteriormente permitirá revisión humana. |
 | FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Gestiona autenticación, contexto organizacional y auditoría; conserva la salud de infraestructura. |
-| PostgreSQL | User, AuditLog, ExecutiveContact, Vendor, Email y EmailAnalysis en public; datos internos de n8n en su propio esquema. BECAlert sigue futuro. |
-| n8n | Orquestar recepción y llamadas a FastAPI en el futuro. Hoy solo se provisiona su instancia vacía. |
+| PostgreSQL | User, AuditLog, ExecutiveContact, Vendor, Email, EmailAnalysis y BECAlert en public; datos internos de n8n en su propio esquema. |
+| n8n | Webhook autenticado → ingestión/análisis mediante API key acotada → ALERT/NO_ALERT/ERROR. Sin reglas BEC ni scoring propios. |
 | LangChain | Un chat model, prompt y structured output validado dentro del backend, sin agentes/tools. |
 | Adaptadores LLM | OpenAI, Gemini o Groq; solo se instancia el proveedor configurado al analizar. |
 
@@ -106,6 +107,13 @@ ERROR es persistido/reintentable con riesgo null. Análisis y evento comparten u
 commit. No cambia el estilo síncrono ni incorpora servicios adicionales.
 Políticas y límites: [análisis BEC](bec-analysis.md).
 
+Fase 6 integra alert-v1 (COMPLETED >=70) y BECAlert en el mismo commit del pipeline.
+La API humana conserva JWT/RBAC; dos POST de automatización usan una key lazy sin
+crear usuarios ficticios. n8n importa una credencial Header Auth y URL desde entorno
+sin habilitar `$env` en nodos. No se conserva historial de ejecuciones con correos;
+los registros temporales se marcan y eliminan mediante pruning periódico.
+[Diseño y contratos](alerts-and-orchestration.md) · [operación n8n](../n8n/README.md).
+
 ## Flujo futuro (solo diseño)
 
 ```mermaid
@@ -128,7 +136,8 @@ flowchart TD
 
 FastAPI será responsable de combinar señales y validar el resultado; un proveedor
 LLM no decidirá por sí solo acciones financieras ni sustituirá la revisión humana.
-El scoring hybrid-v1 ya existe; los criterios de creación de alertas siguen pendientes.
+El scoring hybrid-v1 y la política automática alert-v1 ya existen; recepción real
+de correo, notificaciones y revisión humana siguen pendientes.
 Cambiar de proveedor no deberá modificar consumidores REST ni entidades de negocio.
 Fase 5 incorpora prompts/SDKs con consumidores reales; no se implementan agentes.
 

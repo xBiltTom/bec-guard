@@ -178,13 +178,17 @@ def test_alert_database_constraints(db_session, account, alert_setup, field, val
     db_session.rollback()
 
 
+@pytest.mark.parametrize("old_completed", [False, True])
 def test_alert_audit_failure_rolls_back_entire_pipeline(
     api_client,
     alert_setup,
     db_session,
     migrated_engine,
+    old_completed,
 ):
-    email, _, headers = alert_setup
+    email, assessment, headers = alert_setup
+    if old_completed:
+        assessment(85)
     # Force high local evidence without changing scoring or invoking an LLM.
     from app.models import ExecutiveContact
 
@@ -214,7 +218,9 @@ def test_alert_audit_failure_rolls_back_entire_pipeline(
     try:
         response = api_client.post(f"/api/emails/{email.id}/analyze", headers=headers)
         assert response.status_code == 503
-        assert db_session.scalar(select(func.count()).select_from(EmailAnalysis)) == 0
+        assert db_session.scalar(select(func.count()).select_from(EmailAnalysis)) == int(
+            old_completed
+        )
         assert db_session.scalar(select(func.count()).select_from(BECAlert)) == 0
         assert list(db_session.scalars(select(AuditLog.action))) == ["EMAIL_INGESTED"]
     finally:

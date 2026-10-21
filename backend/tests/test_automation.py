@@ -4,7 +4,7 @@ from threading import Barrier, Event
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.api.dependencies import get_automation_settings
 from app.api.email_analysis import get_analyzer_factory
@@ -262,3 +262,65 @@ def test_concurrent_pipeline_one_call_analysis_alert(
     assert analysis_stub.calls == 1
     assert db_session.scalar(select(func.count()).select_from(EmailAnalysis)) == 1
     assert db_session.scalar(select(func.count()).select_from(BECAlert)) == 1
+
+
+def test_constant_time_key_comparison(api_client, automation_setup, monkeypatch):
+    from app.api import dependencies
+
+    original = dependencies.secrets.compare_digest
+    calls = []
+
+    def compare(left, right):
+        calls.append((type(left), type(right)))
+        return original(left, right)
+
+    monkeypatch.setattr(dependencies.secrets, "compare_digest", compare)
+    headers, payload = automation_setup
+    assert (
+        api_client.post("/api/automation/emails", json=payload, headers=headers).status_code == 201
+    )
+    assert calls == [(bytes, bytes)]
+
+
+def test_automation_alert_audit_failure_is_atomic(
+    api_client,
+    automation_setup,
+    db_session,
+    migrated_engine,
+):
+    headers, payload = automation_setup
+    email_id = api_client.post("/api/automation/emails", json=payload, headers=headers).json()[
+        "email"
+    ]["id"]
+    with migrated_engine.begin() as connection:
+        connection.execute(
+            text("""
+            CREATE FUNCTION public.reject_test_automation_alert() RETURNS trigger
+            LANGUAGE plpgsql AS $$ BEGIN
+                IF NEW.action = 'BEC_ALERT_CREATED' AND NEW.actor_user_id IS NULL THEN
+                    RAISE EXCEPTION 'Test audit failure' USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END; $$
+        """)
+        )
+        connection.execute(
+            text("""
+            CREATE TRIGGER reject_test_automation_alert BEFORE INSERT ON public.audit_log
+            FOR EACH ROW EXECUTE FUNCTION public.reject_test_automation_alert()
+        """)
+        )
+    try:
+        response = api_client.post(f"/api/automation/emails/{email_id}/analyze", headers=headers)
+        assert response.status_code == 503
+        assert response.json() == {"detail": "Database unavailable"}
+        assert db_session.scalar(select(func.count()).select_from(EmailAnalysis)) == 0
+        assert db_session.scalar(select(func.count()).select_from(BECAlert)) == 0
+        assert list(db_session.scalars(select(AuditLog.action))) == ["EMAIL_INGESTED"]
+    finally:
+        db_session.rollback()
+        with migrated_engine.begin() as connection:
+            connection.execute(
+                text("DROP TRIGGER reject_test_automation_alert ON public.audit_log")
+            )
+            connection.execute(text("DROP FUNCTION public.reject_test_automation_alert()"))

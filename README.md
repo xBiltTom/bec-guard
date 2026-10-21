@@ -5,17 +5,18 @@ Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combin
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fases 0–5.** Hay persistencia de User, AuditLog,
-ExecutiveContact, Vendor, Email y EmailAnalysis; autenticación Argon2id/JWT,
+**Estado actual: Fases 0–6.** Hay persistencia de User, AuditLog,
+ExecutiveContact, Vendor, Email, EmailAnalysis y BECAlert; autenticación Argon2id/JWT,
 contexto organizacional, ingestión y análisis BEC híbrido con RBAC y auditoría
 atómica, parser MIME y dataset sintético.
 Se conserva una pantalla mínima
 que comprueba la salud de FastAPI y PostgreSQL. No hay frontend de autenticación.
-Se ingieren, consultan y analizan correos; todavía no se generan alertas.
+Se ingieren, consultan y analizan correos; HIGH/CRITICAL crean alertas OPEN.
+n8n orquesta el flujo mediante un webhook autenticado, sin proveedor de correo real.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
-exactamente un rol por usuario en el MVP. Fase 6 sigue pendiente.
+exactamente un rol por usuario en el MVP. Frontend e HITL quedan para Fase 7.
 
 ## Arquitectura y stack
 
@@ -46,6 +47,8 @@ Documentación:
 - [Ingestión de emails, parser MIME y privacidad](docs/email-ingestion.md)
 - [Dataset sintético, splits y validación](docs/dataset.md)
 - [Motor BEC, reglas, LangChain, scoring y ERROR/retry](docs/bec-analysis.md)
+- [Alertas, API de automatización y orquestación](docs/alerts-and-orchestration.md)
+- [Workflow n8n: importar, publicar y probar](n8n/README.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
 ## Requisitos
@@ -87,6 +90,8 @@ hasta que se solicite un análisis semántico.
 | GENERIC_TIMEZONE | Zona horaria de n8n; por defecto America/Lima. |
 | JWT_SECRET_KEY | Obligatoria para la API, sin valor predeterminado; solo en `.env`/entorno. |
 | JWT_ACCESS_TOKEN_MINUTES / JWT_ALGORITHM | Expiración de acceso (30 minutos por defecto) y HS256. |
+| AUTOMATION_API_KEY | Key aleatoria >=32 caracteres, solo para automatización backend y webhook n8n. Opcional al arrancar; nunca al frontend. |
+| BEC_GUARD_BACKEND_URL | URL interna usada al importar el workflow, default http://backend:8000. |
 | LLM_PROVIDER / LLM_MODEL | openai, google (alias gemini) o groq; modelo con JSON Schema nativo. |
 | LLM_TIMEOUT_SECONDS | Timeout del proveedor, default 30 segundos (1–120). |
 | OPENAI_API_KEY / GOOGLE_API_KEY / GROQ_API_KEY | Solo se usa la del proveedor seleccionado; nunca se envían al frontend. |
@@ -224,7 +229,7 @@ uv run alembic check
 
 Para crear una revisión: `uv run alembic revision --autogenerate -m "describe change"`.
 Revisa el archivo generado antes de aplicarlo. Para revertir la última revisión:
-`uv run alembic downgrade -1`. Revertir 0006 elimina análisis; 0005 elimina emails;
+`uv run alembic downgrade -1`. Revertir 0007 elimina alertas; 0006 elimina análisis; 0005 elimina emails;
 revertir 0004 elimina ejecutivos/proveedores;
 revertir 0003 elimina la auditoría; llegar a base elimina también users. El ciclo
 destructivo se valida solo en la base de test.
@@ -265,7 +270,22 @@ curl 'http://localhost:8000/api/emails/<EMAIL_UUID>/analysis' \
 Todos los roles autenticados leen el resultado. COMPLETED se reutiliza sin otra
 llamada; ERROR se reintenta con el mismo POST y UUID del análisis. Los fallos LLM
 se persisten como ERROR con riesgo null y HTTP 502 (503 sin configuración), nunca
-LOW. No se crean alertas ni se ejecuta la recomendación.
+LOW. Un COMPLETED >=70 crea una BECAlert OPEN con verdict null, sin ejecutar la
+recomendación. GET /api/alerts y GET /api/alerts/{id} permiten lectura a todos los
+roles autenticados; sin PATCH/DELETE ni transiciones HITL.
+
+## Orquestar con n8n
+
+Configura una AUTOMATION_API_KEY aleatoria >=32 caracteres en `.env`, sin imprimirla
+ni versionarla. Backend y n8n reciben la misma key. Sigue la [guía n8n](n8n/README.md)
+para importar/publicar el workflow y llamar a `/webhook/bec-guard/analyze` con
+EmailIngestRequest y header X-BEC-Automation-Key. Devuelve ALERT, NO_ALERT o ERROR.
+
+n8n usa exclusivamente POST /api/automation/emails (Message-ID idempotente) y
+POST /api/automation/emails/{id}/analyze (analysis + alert_id). Esa key no accede
+a los endpoints humanos. El POST humano conserva 409 en duplicados. Se desactiva
+el guardado de ejecuciones n8n y se borran sus registros temporales mediante
+pruning; ver detalles y límites en la guía. No hay Gmail/IMAP ni notificaciones.
 
 Regresión de desarrollo desde backend/, sin proveedor ni BD:
 
@@ -358,7 +378,7 @@ frontend/
   package.json
   package-lock.json
 datasets/          # Corpus JSONL y contexto ficticio, sin importación automática
-n8n/workflows/      # Futuras exportaciones; hoy solo README
+n8n/               # Workflow canónico, importador y guía operativa
 docker/postgres/   # Inicialización del esquema de n8n
 docs/              # Arquitectura, dominio y contratos
 docker-compose.yml
@@ -367,15 +387,14 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente para Fase 6 y posteriores
+## Pendiente para Fase 7 y posteriores
 
-Fase 5 añade reglas BEC, contexto activo, LangChain multiproveedor, scoring y
-EmailAnalysis persistente. Quedan pendientes frontend funcional, CRUD de usuarios,
-recuperación, refresh tokens, conectores de email, creación/revisión de alertas
-y workflows de n8n.
+Fase 6 añade BECAlert automática, lectura de alertas, API key acotada y workflow
+Webhook n8n. Quedan pendientes frontend funcional, HITL, CRUD de usuarios,
+recuperación, refresh tokens, conectores de email y notificaciones.
 También quedan fuera dashboards, reportes, Gmail, IMAP y Microsoft Graph.
 
 Las APIs de contexto ofrecen GET/POST/PATCH; ADMIN/MANAGER escriben. Emails ofrecen
 POST/GET, con ingestión también para ANALYST. Todos los roles leen; no hay DELETE.
-EmailAnalysis y endpoints de análisis están implementados; BECAlert sigue siendo
-conceptual. No hay frontend de análisis ni workflow de n8n.
+EmailAnalysis, BECAlert y workflow n8n están implementados. No hay frontend de
+análisis ni asignación, veredicto o cierre de alertas.

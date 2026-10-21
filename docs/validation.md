@@ -322,4 +322,57 @@ Los ciclos destructivos se limitaron a PostgreSQL 18 descartable. En desarrollo
 solo se aplicó upgrade; email_analysis quedó con cero filas, sin datos sintéticos
 ni auditoría de pruebas. Las migraciones históricas, frontend, dataset, workflow CI
 y n8n/workflows conservan diff vacío respecto a Fase 4. La ejecución remota de
-Fase 5 queda para un push posterior del usuario; no se hizo push en esta fase.
+Fase 5 se ejecutó después del push del usuario: CI #6 terminó en **SUCCESS** sobre
+`feff2b018dbca5499caab326535f2e6e8e5db166`, confirmado al iniciar Fase 6.
+No se hizo push durante el trabajo de Fase 5.
+
+## Fase 6: alertas automáticas y orquestación operativa
+
+Inicio: main limpia en `feff2b018dbca5499caab326535f2e6e8e5db166`, con los cuatro
+commits de Fase 5 revisados y CI #6 SUCCESS confirmado por el usuario. Se trabajó
+en checkpoints 6A/6B/6C/6D con commits locales separados, sin squash ni push.
+
+| Comprobación | Resultado |
+| --- | --- |
+| Backend completo, PostgreSQL 18 real | **403 aprobadas**: 231 unitarias y 172 de integración. **45 nuevas** respecto a las 358 de Fase 5. |
+| BECAlert | HIGH/CRITICAL, 70 exacto, 69, LOW/MEDIUM y ERROR; OPEN/verdict null, idempotencia, recuperación de COMPLETED antiguo sin gasto LLM, FK/UNIQUE/CHECK y lectura sin body. |
+| Atomicidad | Fallo real de auditoría revierte nuevo análisis/alerta, alerta de análisis antiguo y pipeline automatizado. Los eventos exitosos no quedan parcialmente persistidos. |
+| Automatización | Key correcta/incorrecta/ausente/no configurada, compare_digest, SecretStr, scopes sin bypass JWT, 201 nuevo/200 duplicado, sin sobrescritura ni evento extra; humano conserva 409. |
+| Pipeline y concurrencia | HIGH con alert_id, LOW/MEDIUM sin alerta, ERROR con riesgo null, retry mismo analysis UUID y una alerta. Carreras de ingestión y análisis sin duplicados, una llamada semántica en COMPLETED concurrente. |
+| Auditoría | Humanos conservan User/rol; automatización actor/rol null. EMAIL_INGESTED, EMAIL_ANALYZED, EMAIL_ANALYSIS_FAILED y BEC_ALERT_CREATED con metadata mínima, details null y sin contenido del correo. |
+| HTTP real | Uvicorn sobre BD descartable: automatización HIGH/LOW/ERROR/retry, humano HIGH, GET alerts/list/detail por los cuatro roles, sin cuerpos, 401 y PATCH/DELETE 405. No se inyectó fake provider en producción. |
+| Migraciones | head → 0006 → head, head → base → head y ciclos históricos aprobados en BD descartable; Alembic check sin diferencias. 0001–0006 intactas. |
+| Ruff/dependencias | uv sync --frozen, check y format --check aprobados; sin nuevas dependencias ni cambio de lockfiles. |
+| Dataset | Validador estructural heredado aprobado; dataset/contexto intactos. Holdout no evaluado ni usado para tuning/decisiones de esta fase. |
+| Development smoke | 98 casos, resultados idénticos a Fase 5: 70 legítimos 0–26, 28 BEC 15–90, 21 hard negatives legítimos LOW; ningún ajuste de scoring. |
+| Frontend | npm ci, lint, format:check y build aprobados; sin cambios frontend. |
+| CI | actionlint 1.7.12 aprobado; workflow y PostgreSQL efímero conservados, sin n8n ni proveedores en CI. Equivalente local aprobado; sin ejecución remota de Fase 6 durante este trabajo. |
+| Docker/Compose | Config válido, imagen backend reconstruida, upgrade 0006→0007 aplicado solo hacia adelante en desarrollo; backend, frontend, PostgreSQL y n8n healthy. |
+| n8n 2.44.4 | Workflow importado y publicado con CLI oficial; readiness 200. JSON canónico inactive, sin pinData/secrets; Webhook, Set, HTTP Request, IF, Switch y Respond. Tres tests de artefacto aprobados. |
+| Webhook real | Correo sintético → ingestión autenticada → EmailAnalysis ERROR LLM_NOT_CONFIGURED → HTTP 503/route ERROR, riesgo null y ninguna alerta. Sin llamadas OpenAI/Gemini/Groq. |
+| Routing del artefacto | Expresiones reales del JSON ejecutadas con entradas sintéticas dentro del contenedor: HIGH/CRITICAL→ALERT, LOW/MEDIUM→NO_ALERT, ERROR e inconsistencias→ERROR. Sin llamadas a backend/LLM en esa comprobación. |
+| Privacidad n8n | Save success/error/manual/progress desactivados. Se verificó soft-delete inicial y borrado físico periódico: cero filas conservan el body del smoke. Hard-delete cada minuto, buffer 0; metadata restante con max age 24h. |
+| Secretos | Key local aleatoria generada en .env ignorado con permisos 600, sin mostrarla. Credencial n8n cifrada, key ausente de archivos versionables y key/body ausentes de logs operativos comprobados. `$env` sigue bloqueado en nodos. |
+| Estructura n8n | Metadata anterior/posterior idéntica: **160 tablas, 1270 columnas y 1429 constraints**. Solo datos de credencial/workflow/ejecución gestionados mediante mecanismos propios de n8n. |
+
+La lectura de código instalado confirmó el bloqueo de `$env` y los nombres de
+variables de ejecución. El importador toma entorno desde el proceso administrativo,
+crea una credencial Header Auth y fija la URL en Configuration; no relaja controles
+globales. Los archivos temporales con credencial se crean 0600 y se eliminan.
+
+Con save=none n8n conserva inicialmente datos de recuperación y marca deletedAt
+al terminar; esa fila puede conservar status running hasta su borrado físico.
+No se confundió ese registro con una ejecución activa. Se ajustó el hard-delete a
+un minuto sin buffer y se verificó la limpieza real, sin modificar tablas n8n.
+No es borrado instantáneo ni una garantía de deadline ante fallo del servicio.
+
+Quedó en desarrollo un correo sintético con Message-ID
+`<phase6-webhook-smoke@fixtures.becguard.example>`, su análisis ERROR y auditoría
+actor null, como evidencia del camino real. El resto de fixtures/usuarios y el
+servidor HTTP de validación se limitaron a PostgreSQL descartable y se limpiaron.
+No se añadieron usuarios ficticios a desarrollo ni se gastaron tokens LLM.
+
+Se mantiene el aviso de deprecación upstream de google-genai ya documentado.
+No se implementó frontend, HITL, asignación, veredicto, cierre, Gmail/IMAP/Graph ni
+notificaciones. Alcance y límites: [alertas y orquestación](alerts-and-orchestration.md)
+y [guía operativa n8n](../n8n/README.md).
