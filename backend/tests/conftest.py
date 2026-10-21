@@ -189,3 +189,43 @@ def analysis_stub():
             )
 
     return Analyzer()
+
+
+@pytest.fixture
+def alert_setup(db_session, account, email_payload, auth_settings, api_app, analysis_stub):
+    from datetime import UTC, datetime
+
+    from app.api.email_analysis import get_analyzer_factory
+    from app.core.tokens import create_access_token
+    from app.models import EmailAnalysis
+    from app.schemas.email import EmailIngestRequest
+    from app.services.email_ingestion import ingest_email
+    from app.services.hybrid_scoring import risk_level
+
+    email = ingest_email(db_session, EmailIngestRequest(**email_payload), actor=account)
+    api_app.dependency_overrides[get_analyzer_factory] = lambda: lambda: analysis_stub
+    headers = {"Authorization": f"Bearer {create_access_token(account.id, auth_settings)}"}
+
+    def assessment(score=70, status="COMPLETED"):
+        row = EmailAnalysis(
+            email_id=email.id,
+            status=status,
+            deterministic_score=100,
+            semantic_score=score if status == "COMPLETED" else None,
+            risk_score=score if status == "COMPLETED" else None,
+            risk_level=risk_level(score) if status == "COMPLETED" else None,
+            bec_type=None,
+            signals=[],
+            summary="Test" if status == "COMPLETED" else None,
+            recommended_action="Verify" if status == "COMPLETED" else None,
+            provider="openai",
+            model="unit-test-model",
+            policy_version="det-v1/semantic-v1/hybrid-v1",
+            error_code="LLM_TIMEOUT" if status == "ERROR" else None,
+            analyzed_at=datetime.now(UTC),
+        )
+        db_session.add(row)
+        db_session.commit()
+        return row
+
+    return email, assessment, headers

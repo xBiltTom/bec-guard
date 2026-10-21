@@ -13,6 +13,7 @@ from app.api.email_analysis import router as analysis_router
 from app.api.emails import router as emails_router
 from app.api.health import router as health_router
 from app.api.organizational_context import router as context_router
+from app.api.product import router as product_router
 from app.core.config import AuthSettings, Settings
 from app.core.database import create_database_engine, create_session_factory
 
@@ -42,6 +43,7 @@ def create_app(
         # Do not return or log database connection details or credentials.
         return JSONResponse(status_code=503, content={"detail": "Database unavailable"})
 
+    application.include_router(product_router)
     application.include_router(health_router)
     application.include_router(auth_router)
     application.include_router(context_router)

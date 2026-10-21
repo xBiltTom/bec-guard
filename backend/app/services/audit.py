@@ -16,6 +16,10 @@ class AuditAction(StrEnum):
     EMAIL_INGESTED = "EMAIL_INGESTED"
     EMAIL_ANALYZED = "EMAIL_ANALYZED"
     EMAIL_ANALYSIS_FAILED = "EMAIL_ANALYSIS_FAILED"
+    BEC_ALERT_CLAIMED = "BEC_ALERT_CLAIMED"
+    BEC_ALERT_RELEASED = "BEC_ALERT_RELEASED"
+    BEC_ALERT_CONFIRMED = "BEC_ALERT_CONFIRMED"
+    BEC_ALERT_FALSE_POSITIVE = "BEC_ALERT_FALSE_POSITIVE"
     BEC_ALERT_CREATED = "BEC_ALERT_CREATED"
     EXECUTIVE_CREATED = "EXECUTIVE_CREATED"
     EXECUTIVE_UPDATED = "EXECUTIVE_UPDATED"
@@ -172,4 +176,19 @@ def record_alert_created(
         details=None,
     )
     session.add(event)
+    return event
+
+
+def record_alert_review(
+    session: Session, action: AuditAction, *, actor: User, alert_id: UUID, peer: str | None = None
+) -> AuditLog:
+    if action not in {
+        AuditAction.BEC_ALERT_CLAIMED,
+        AuditAction.BEC_ALERT_RELEASED,
+        AuditAction.BEC_ALERT_CONFIRMED,
+        AuditAction.BEC_ALERT_FALSE_POSITIVE,
+    }:
+        raise ValueError("Invalid review event")
+    event = record_alert_created(session, actor=actor, alert_id=alert_id, peer=peer)
+    event.action = action.value
     return event

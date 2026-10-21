@@ -24,8 +24,12 @@ def test_upgrade_downgrade_upgrade_and_metadata_match(migrated_engine, migration
     }
     with migrated_engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM public.alembic_version")) == (
-            "0007_bec_alerts"
+            "0008_alert_hitl_constraints"
         )
+
+    migration_runner(command.downgrade, "0007_bec_alerts")
+    migration_runner(command.upgrade, "head")
+    migration_runner(command.check)
 
     migration_runner(command.downgrade, "0006_email_analysis")
     assert "bec_alerts" not in tables() and "email_analysis" in tables()

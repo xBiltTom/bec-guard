@@ -40,6 +40,14 @@ class BECAlert(Base):
         UniqueConstraint("analysis_id"),
         CheckConstraint("status IN ('OPEN', 'UNDER_REVIEW', 'CLOSED')", name="status"),
         CheckConstraint("verdict IN ('CONFIRMED_BEC', 'FALSE_POSITIVE')", name="verdict"),
-        CheckConstraint("status <> 'OPEN' OR closed_at IS NULL", name="open_not_closed"),
+        CheckConstraint(
+            "(status = 'OPEN' AND assigned_to IS NULL AND verdict IS NULL "
+            "AND resolution IS NULL AND closed_at IS NULL) OR "
+            "(status = 'UNDER_REVIEW' AND assigned_to IS NOT NULL AND verdict IS NULL "
+            "AND resolution IS NULL AND closed_at IS NULL) OR "
+            "(status = 'CLOSED' AND assigned_to IS NOT NULL AND verdict IS NOT NULL "
+            "AND resolution IS NOT NULL AND closed_at IS NOT NULL)",
+            name="review_consistency",
+        ),
         Index("ix_bec_alerts_created_at_id", created_at.desc(), id),
     )
