@@ -36,3 +36,6 @@ n8n/data/
 .vscode/
 *.log
 .DS_Store
+
+# Controlled academic evaluation outputs (includes per-case holdout predictions)
+artifacts/evaluation/
