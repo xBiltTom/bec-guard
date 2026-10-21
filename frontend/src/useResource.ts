@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import { api, message } from './api';
-export function useResource<T>(path: string) {
+export function useResource<T>(path: string | null) {
   const [state, setState] = useState<{
-    path: string;
+    path: string | null;
     data: T | null;
     error: string;
     loading: boolean;
   }>({ path, data: null, error: '', loading: true });
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    if (!path) return;
     const controller = new AbortController();
     api<T>(path, { signal: controller.signal })
       .then((data) => {

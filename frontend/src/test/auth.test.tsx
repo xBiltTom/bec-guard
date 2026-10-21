@@ -1,3 +1,4 @@
+import { dashboard, response } from './fixtures';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -20,17 +21,13 @@ function renderApp(path = '/') {
     </MemoryRouter>,
   );
 }
-export const response = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 describe('session', () => {
   it('protects routes and logs in using sessionStorage', async () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response({ access_token: 'test-token' }))
-      .mockResolvedValueOnce(response(user));
+      .mockResolvedValueOnce(response(user))
+      .mockResolvedValue(response([]));
     vi.stubGlobal('fetch', fetch);
     renderApp('/alerts');
     await userEvent.type(
@@ -54,7 +51,19 @@ describe('session', () => {
     sessionStorage.setItem(tokenKey, 'test-token');
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(response({ ...user, role })),
+      vi
+        .fn()
+        .mockImplementation((url: string) =>
+          Promise.resolve(
+            response(
+              url.endsWith('/auth/me')
+                ? { ...user, role }
+                : url.includes('/dashboard/')
+                  ? dashboard
+                  : [],
+            ),
+          ),
+        ),
     );
     renderApp();
     await screen.findByText('Lucía');
@@ -67,7 +76,14 @@ describe('session', () => {
     const fetch = vi
       .fn()
       .mockResolvedValueOnce(response(user))
-      .mockResolvedValue(response({}, 401));
+      .mockImplementation((url: string) =>
+        Promise.resolve(
+          response(
+            url.includes('/dashboard/') ? dashboard : [],
+            url.includes('/dashboard/') || url.includes('/alerts') ? 200 : 401,
+          ),
+        ),
+      );
     vi.stubGlobal('fetch', fetch);
     renderApp();
     await screen.findByText('Lucía');

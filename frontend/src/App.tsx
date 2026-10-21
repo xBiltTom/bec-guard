@@ -11,8 +11,11 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { ApiError, message } from './api';
+import { Dashboard } from './pages/Dashboard';
+import { Alerts } from './pages/Alerts';
+import { AlertDetail } from './pages/AlertDetail';
 import { AuthProvider, useAuth } from './auth';
-import { ErrorState, LoadingState, PageHeader, label } from './components';
+import { ErrorState, LoadingState, label } from './components';
 
 function Login() {
   const { user, login } = useAuth();
@@ -178,21 +181,15 @@ function Shell() {
     </div>
   );
 }
-function Foundation() {
-  return (
-    <PageHeader
-      title="Centro de revisión"
-      description="Consulta la evidencia y registra tus decisiones."
-    />
-  );
-}
 export function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route element={<Protected />}>
         <Route element={<Shell />}>
-          <Route index element={<Foundation />} />
+          <Route index element={<Dashboard />} />
+          <Route path="alerts" element={<Alerts />} />
+          <Route path="alerts/:alertId" element={<AlertDetail />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
