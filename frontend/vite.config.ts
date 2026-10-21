@@ -7,6 +7,12 @@ export default defineConfig(({ mode }) => {
   // Only server-side settings are loaded here; no secret is exposed as VITE_*.
   const env = loadEnv(mode, root, ['BACKEND_PORT', 'BACKEND_PROXY_TARGET']);
   const proxy = {
+    '/api': {
+      target:
+        env.BACKEND_PROXY_TARGET ||
+        `http://127.0.0.1:${env.BACKEND_PORT || '8000'}`,
+      changeOrigin: true,
+    },
     '/health': {
       target:
         env.BACKEND_PROXY_TARGET ||
