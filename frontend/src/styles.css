@@ -1063,3 +1063,29 @@ th:first-child,
 td:first-child {
   min-width: 115px;
 }
+.reports-panel {
+  max-width: 820px;
+}
+.reports-panel > p {
+  max-width: 72ch;
+}
+.report-dates {
+  margin-top: 26px;
+}
+.report-dates input {
+  display: block;
+  margin-top: 8px;
+  min-width: 210px;
+}
+.report-feedback {
+  margin: 20px 0 0;
+}
+@media (max-width: 800px) {
+  .report-dates label {
+    min-width: 100%;
+  }
+  .report-dates input {
+    width: 100%;
+    min-width: 0;
+  }
+}

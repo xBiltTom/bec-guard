@@ -41,6 +41,8 @@ jobs:
           version: "0.13.4"
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
+      - name: Install PDF runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core
       - run: uv sync --frozen
       # Integration fixtures apply real migrations and test upgrade/downgrade/upgrade.
       - run: uv run pytest

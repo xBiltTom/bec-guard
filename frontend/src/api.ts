@@ -54,3 +54,50 @@ export function message(error: unknown): string {
     ? error.message
     : 'No se pudo completar la operación. Vuelve a intentarlo.';
 }
+
+export async function authenticatedDownload(
+  path: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const token = sessionStorage.getItem(tokenKey);
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      cache: 'no-store',
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError')
+      throw error;
+    throw new ApiError(0, null);
+  }
+  if (!response.ok) {
+    if (response.status === 401 && token) {
+      sessionStorage.removeItem(tokenKey);
+      window.dispatchEvent(new Event('bec-session-expired'));
+    }
+    throw new ApiError(response.status, null);
+  }
+  const extension = path.split('?')[0].endsWith('.xlsx') ? 'xlsx' : 'pdf';
+  const suggested = /filename="?([^";]+)"?/i
+    .exec(response.headers.get('Content-Disposition') || '')?.[1]
+    ?.trim();
+  const filename =
+    suggested &&
+    /^bec-guard-operational-\d{8}\.(pdf|xlsx)$/.test(suggested) &&
+    suggested.endsWith(`.${extension}`)
+      ? suggested
+      : `bec-guard-operational.${extension}`;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  try {
+    link.href = url;
+    link.download = filename;
+    document.body.append(link);
+    link.click();
+  } finally {
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+}

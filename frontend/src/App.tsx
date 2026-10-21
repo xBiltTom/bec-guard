@@ -14,6 +14,7 @@ import { ApiError, message } from './api';
 import { Emails, EmailDetail } from './pages/Emails';
 import { ContextPage } from './pages/Context';
 import { Audit } from './pages/Audit';
+import { Reports } from './pages/Reports';
 import { Dashboard } from './pages/Dashboard';
 import { Alerts } from './pages/Alerts';
 import { AlertDetail } from './pages/AlertDetail';
@@ -124,6 +125,7 @@ function Shell() {
     ['/executives', 'Ejecutivos'],
     ['/vendors', 'Proveedores'],
   ];
+  if (user && user.role !== 'ANALYST') items.push(['/reports', 'Reportes']);
   if (user?.role === 'ADMIN' || user?.role === 'AUDITOR')
     items.push(['/audit', 'Auditoría']);
   return (
@@ -204,6 +206,7 @@ export function AppRoutes() {
             element={<ContextPage key="vendors" kind="vendors" />}
           />
           <Route path="audit" element={<Audit />} />
+          <Route path="reports" element={<Reports />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

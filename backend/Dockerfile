@@ -4,6 +4,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/app/.venv/bin:$PATH"
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+       libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz-subset0 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:0.13.4 /uv /usr/local/bin/uv
 COPY pyproject.toml uv.lock ./

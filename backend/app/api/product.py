@@ -6,8 +6,9 @@ from sqlalchemy import func, select
 
 from app.api.dependencies import require_roles
 from app.api.emails import Database, Reader
-from app.models import AuditLog, BECAlert, Email, EmailAnalysis, Role, User
+from app.models import AuditLog, BECAlert, Role, User
 from app.schemas.product import AuditResponse, DashboardSummary
+from app.services.operational_summary import operational_summary
 
 router = APIRouter(prefix="/api", tags=["Product"])
 AuditReader = Annotated[User, Depends(require_roles(Role.ADMIN, Role.AUDITOR))]
@@ -15,16 +16,6 @@ AuditReader = Annotated[User, Depends(require_roles(Role.ADMIN, Role.AUDITOR))]
 
 @router.get("/dashboard/summary", response_model=DashboardSummary)
 def dashboard_summary(session: Database, _actor: Reader):
-    def counts(column, model):
-        return dict(
-            session.execute(select(column, func.count()).select_from(model).group_by(column)).all()
-        )
-
-    statuses = counts(EmailAnalysis.status, EmailAnalysis)
-    alerts = counts(BECAlert.status, BECAlert)
-    verdicts = counts(BECAlert.verdict, BECAlert)
-    risks = counts(EmailAnalysis.risk_level, EmailAnalysis)
-    types = counts(EmailAnalysis.bec_type, EmailAnalysis)
     today = datetime.now(UTC).date()
     dates = [today - timedelta(days=i) for i in reversed(range(7))]
     day = func.date(func.timezone("UTC", BECAlert.created_at))
@@ -34,21 +25,7 @@ def dashboard_summary(session: Database, _actor: Reader):
         ).all()
     )
     return {
-        "emails_total": session.scalar(select(func.count()).select_from(Email)),
-        "analyses_completed": statuses.get("COMPLETED", 0),
-        "analyses_error": statuses.get("ERROR", 0),
-        "alerts": {key.lower(): alerts.get(key, 0) for key in ("OPEN", "UNDER_REVIEW", "CLOSED")},
-        "verdicts": {
-            key.lower(): verdicts.get(key, 0) for key in ("CONFIRMED_BEC", "FALSE_POSITIVE")
-        },
-        "risk_distribution": {
-            key: risks.get(key, 0) for key in ("LOW", "MEDIUM", "HIGH", "CRITICAL")
-        },
-        "bec_type_distribution": [
-            {"bec_type": key, "count": value}
-            for key, value in sorted(types.items(), key=lambda item: item[0] or "")
-            if key is not None
-        ],
+        **operational_summary(session),
         "alerts_last_7_days": [{"date": d, "count": daily.get(d, 0)} for d in dates],
     }
 
