@@ -1,9 +1,8 @@
 # Dominio mínimo
 
 Estas definiciones parten de Fase 0. User, Role, AuditLog, ExecutiveContact, Vendor
-y Email tienen persistencia. Hay autenticación, RBAC y gestión backend del contexto
-organizacional e ingestión de emails. EmailAnalysis y BECAlert siguen siendo futuros,
-sin reglas BEC.
+y Email/EmailAnalysis tienen persistencia. Hay autenticación, RBAC, contexto
+organizacional, ingestión y análisis BEC híbrido. BECAlert sigue siendo futuro.
 Los identificadores son UUID y las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC.
 
 ## Conceptos
@@ -15,7 +14,7 @@ Los identificadores son UUID y las fechas se intercambiarán como ISO 8601 con z
 | ExecutiveContact | Ejecutivo conocido persistente: UUID, name, position, department nullable, un email legítimo normalizado, is_active y timestamps. Su dominio se podrá derivar del email. |
 | Vendor | Proveedor conocido persistente: UUID, name, un domain principal canónico, contact_email y bank_account_reference opcionales, is_active y timestamps. Referencia bancaria opaca, nunca auditada. |
 | Email | Correo persistente normalizado: UUID, Message-ID único, thread_id opcional, remitente, Reply-To, Return-Path, destinatarios JSONB, asunto, body_text, Authentication-Results, received_at e ingested_at. Sin análisis ni labels de evaluación. |
-| EmailAnalysis | Ejecución de análisis de un Email: identificador, referencia al correo, fecha, versión del analizador y resultado neutral `BECAnalysisResult`. Un correo podrá tener varios análisis. |
+| EmailAnalysis | Análisis actual de un Email, máximo uno por UNIQUE email_id: status COMPLETED/ERROR, scores, riesgo/tipo nullable, señales JSONB, resumen/recomendación, proveedor/modelo, versión, error_code y fecha. Sin raw output ni prompt. |
 | BECAlert | Caso para revisión humana asociado a un análisis: identificador, estado operativo `status` (AlertStatus), veredicto humano `verdict` (AlertVerdict o `null`), responsable opcional y fechas. Su creación dependerá de una política futura, no de todo análisis automáticamente. |
 | AuditLog | Registro persistente append-only con UUID, actor nullable, snapshot de rol, acción, recurso nullable, IP nullable, details JSONB mínimos y fecha. Un trigger impide UPDATE/DELETE. Audita auth, cambios de contexto e ingestión sin contenido del email. Nunca copia passwords, hashes, JWT, referencias bancarias ni cuerpos de correo. |
 
@@ -64,7 +63,22 @@ del mensaje. Parser, límites y contratos en [ingestión](email-ingestion.md).
 
 El [dataset](dataset.md) separa label, split y expected_bec_type de la entrada
 normalizada: son anotaciones de evaluación, no columnas ni resultados del detector.
-No se implementan EmailAnalysis, motor BEC, scoring o alertas.
+Fase 5 consume únicamente el Email y contexto activo; no introduce anotaciones
+de evaluación en el modelo ni implementa alertas.
+
+## EmailAnalysis persistente (Fase 5)
+
+`public.email_analysis` referencia emails con FK RESTRICT y UNIQUE email_id.
+Guarda UUID, status, deterministic_score, semantic_score/risk_score/risk_level/
+bec_type nullable, signals JSONB, summary/recommended_action nullable, provider/
+model nullable, policy_version, error_code nullable y analyzed_at UTC. La revisión
+0006 añade únicamente esta tabla; no cambia 0001–0005 ni n8n.
+
+COMPLETED requiere scores semántico/final, nivel, resumen y recomendación.
+ERROR conserva señales locales y deterministic_score, pero nunca tiene score
+final, nivel o tipo. Puede reintentarse sobre la misma fila; COMPLETED se reutiliza.
+El resultado y su evento de auditoría se confirman en la misma transacción.
+Políticas, reglas, privacidad y API: [análisis BEC](bec-analysis.md).
 
 ## Enumeraciones previstas
 
@@ -72,9 +86,9 @@ No se implementan EmailAnalysis, motor BEC, scoring o alertas.
 
 `LOW`, `MEDIUM`, `HIGH`, `CRITICAL`.
 
-Categorías de riesgo del análisis. No se fijan aún umbrales ni se interpreta el
-score como probabilidad estadística. La política de conversión se definirá junto
-al motor y se versionará para conservar trazabilidad.
+Categorías implementadas por hybrid-v1: 0–39 LOW, 40–69 MEDIUM, 70–84 HIGH,
+85–100 CRITICAL. Score no es probabilidad estadística. La versión completa
+almacenada es det-v1/semantic-v1/hybrid-v1.
 
 ### AlertStatus
 

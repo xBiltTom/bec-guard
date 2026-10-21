@@ -5,16 +5,17 @@ Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combin
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fases 0, 1, 2A, 2B, 3 y 4.** Hay persistencia de User, AuditLog,
-ExecutiveContact, Vendor y Email; autenticación Argon2id/JWT, contexto organizacional
-e ingestión normalizada con RBAC y auditoría atómica, parser MIME y dataset sintético.
+**Estado actual: Fases 0–5.** Hay persistencia de User, AuditLog,
+ExecutiveContact, Vendor, Email y EmailAnalysis; autenticación Argon2id/JWT,
+contexto organizacional, ingestión y análisis BEC híbrido con RBAC y auditoría
+atómica, parser MIME y dataset sintético.
 Se conserva una pantalla mínima
 que comprueba la salud de FastAPI y PostgreSQL. No hay frontend de autenticación.
-Se ingieren y consultan correos; todavía no se analizan ni se generan alertas.
+Se ingieren, consultan y analizan correos; todavía no se generan alertas.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
-exactamente un rol por usuario en el MVP. Fase 5 sigue pendiente.
+exactamente un rol por usuario en el MVP. Fase 6 sigue pendiente.
 
 ## Arquitectura y stack
 
@@ -29,20 +30,22 @@ PostgreSQL 18 y n8n 2.44.4. Las dependencias de aplicación quedan fijadas en
 compatibilidad con el parser de ESLint. Los tags de Python, Node y PostgreSQL
 reciben parches dentro de su versión mayor; n8n está fijado a una versión concreta.
 
-LangChain y adaptadores multiproveedor (OpenAI, Gemini, Groq u otros) se incorporarán
-en fases posteriores. No hay llamadas LLM, modelos locales, SDKs de proveedores,
+LangChain combina un chat model OpenAI, Gemini o Groq con un prompt y salida
+estructurada validada, junto con reglas deterministas y contexto activo.
+La configuración LLM se exige solo al analizar. Sin agentes, modelos locales,
 Redis ni workers adicionales. Se usa CSS sencillo sin bibliotecas de componentes.
 
 Documentación:
 
 - [Arquitectura y flujo futuro](docs/architecture.md)
 - [Dominio, entidades, roles y enums](docs/domain.md)
-- [Contratos de salud y análisis futuro](docs/api-contracts.md)
+- [Contratos de salud y análisis](docs/api-contracts.md)
 - [Persistencia, migraciones y base de pruebas](docs/persistence.md)
 - [Autenticación, bootstrap ADMIN, JWT, RBAC y auditoría](docs/authentication.md)
 - [Contexto organizacional, endpoints, permisos y lookups](docs/organizational-context.md)
 - [Ingestión de emails, parser MIME y privacidad](docs/email-ingestion.md)
 - [Dataset sintético, splits y validación](docs/dataset.md)
+- [Motor BEC, reglas, LangChain, scoring y ERROR/retry](docs/bec-analysis.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
 ## Requisitos
@@ -71,7 +74,8 @@ chmod 600 .env
 Edita `.env` y asigna una contraseña local aleatoria y no vacía a
 `POSTGRES_PASSWORD` y una clave JWT independiente a `JWT_SECRET_KEY` (mínimo 32
 caracteres aleatorios). Puedes generar cada valor con `openssl rand -hex 32`.
-No existen credenciales predeterminadas. Las claves futuras de IA siguen vacías.
+No existen credenciales predeterminadas. Las claves de IA pueden quedar vacías
+hasta que se solicite un análisis semántico.
 
 | Variable | Uso |
 | --- | --- |
@@ -83,8 +87,9 @@ No existen credenciales predeterminadas. Las claves futuras de IA siguen vacías
 | GENERIC_TIMEZONE | Zona horaria de n8n; por defecto America/Lima. |
 | JWT_SECRET_KEY | Obligatoria para la API, sin valor predeterminado; solo en `.env`/entorno. |
 | JWT_ACCESS_TOKEN_MINUTES / JWT_ALGORITHM | Expiración de acceso (30 minutos por defecto) y HS256. |
-| LLM_PROVIDER / LLM_MODEL | Reservadas, sin uso actual. |
-| OPENAI_API_KEY / GOOGLE_API_KEY / GROQ_API_KEY | Reservadas, sin uso actual; nunca se envían al frontend. |
+| LLM_PROVIDER / LLM_MODEL | openai, google (alias gemini) o groq; modelo con JSON Schema nativo. |
+| LLM_TIMEOUT_SECONDS | Timeout del proveedor, default 30 segundos (1–120). |
+| OPENAI_API_KEY / GOOGLE_API_KEY / GROQ_API_KEY | Solo se usa la del proveedor seleccionado; nunca se envían al frontend. |
 
 No ejecutes `source .env`: Compose y Pydantic leen el archivo directamente.
 Para contraseñas con caracteres especiales, utiliza comillas simples en `.env`.
@@ -159,7 +164,8 @@ uv run ruff format --check .
 ```
 
 La suite verifica salud, passwords, JWT, bootstrap, login/me, RBAC, persistencia,
-migraciones, contexto, emails, parser MIME, dataset y auditoría append-only. Las pruebas de
+migraciones, contexto, emails, parser MIME, dataset, reglas, semántica con fakes,
+scoring, análisis/retry/concurrencia y auditoría append-only. Las pruebas de
 integración usan PostgreSQL real y requieren `TEST_DATABASE_URL`, una variable independiente de
 `.env`, apuntando a una base de pruebas vacía. Sin ella se omiten las de integración.
 Consulta [cómo levantar esa base y ejecutar la suite completa](docs/persistence.md#pruebas-de-integración).
@@ -218,7 +224,7 @@ uv run alembic check
 
 Para crear una revisión: `uv run alembic revision --autogenerate -m "describe change"`.
 Revisa el archivo generado antes de aplicarlo. Para revertir la última revisión:
-`uv run alembic downgrade -1`. Revertir 0005 elimina emails;
+`uv run alembic downgrade -1`. Revertir 0006 elimina análisis; 0005 elimina emails;
 revertir 0004 elimina ejecutivos/proveedores;
 revertir 0003 elimina la auditoría; llegar a base elimina también users. El ciclo
 destructivo se valida solo en la base de test.
@@ -242,6 +248,34 @@ uv run python -m app.scripts.validate_dataset
 
 [Contrato, límites y parser](docs/email-ingestion.md) ·
 [Dataset y prevención de leakage](docs/dataset.md).
+
+## Analizar un Email existente
+
+Configura LLM_PROVIDER, LLM_MODEL y la key del proveedor elegido en `.env` o entorno
+del backend. Después de reconstruir backend, aplica `alembic upgrade head`.
+ADMIN/MANAGER/ANALYST pueden ejecutar:
+
+```bash
+curl -X POST 'http://localhost:8000/api/emails/<EMAIL_UUID>/analyze' \
+  -H 'Authorization: Bearer <ACCESS_TOKEN>'
+curl 'http://localhost:8000/api/emails/<EMAIL_UUID>/analysis' \
+  -H 'Authorization: Bearer <ACCESS_TOKEN>'
+```
+
+Todos los roles autenticados leen el resultado. COMPLETED se reutiliza sin otra
+llamada; ERROR se reintenta con el mismo POST y UUID del análisis. Los fallos LLM
+se persisten como ERROR con riesgo null y HTTP 502 (503 sin configuración), nunca
+LOW. No se crean alertas ni se ejecuta la recomendación.
+
+Regresión de desarrollo desde backend/, sin proveedor ni BD:
+
+```bash
+uv run python -m app.scripts.check_development
+# Opcional, permite llamadas externas con coste: añadir --llm.
+```
+
+Solo procesa development; holdout queda reservado. Reglas, pesos, thresholds,
+contrato y limitaciones en [análisis BEC](docs/bec-analysis.md).
 
 ## Desarrollo de aplicaciones en el host
 
@@ -305,12 +339,12 @@ docker compose logs --tail=80 frontend
 ```text
 backend/
   app/
-    api/           # Salud, auth, contexto y emails
+    api/           # Salud, auth, contexto, emails y análisis BEC
     core/          # Settings y SQLAlchemy
     models/        # Base y entidades persistentes, incluido Email
     schemas/       # Contratos HTTP separados
-    services/      # Auth, auditoría, contexto, ingestión, MIME y dataset
-    scripts/       # CLI create_admin y validate_dataset
+    services/      # Auth, auditoría, contexto, ingestión, MIME, dataset y motor BEC
+    scripts/       # CLI create_admin, validate_dataset y check_development
     main.py
   tests/
   migrations/      # Alembic: env.py, plantilla y versions/
@@ -333,15 +367,15 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente para Fase 5 y posteriores
+## Pendiente para Fase 6 y posteriores
 
-Fase 4 añade persistencia/consulta de emails, ingestión normalizada, parser MIME
-y corpus sintético sin detección automática. Quedan pendientes frontend funcional,
-CRUD de usuarios, recuperación, refresh tokens, conectores de email, reglas BEC, scoring,
-LangChain, adaptadores LLM y prompts, revisión de alertas y workflows de n8n.
+Fase 5 añade reglas BEC, contexto activo, LangChain multiproveedor, scoring y
+EmailAnalysis persistente. Quedan pendientes frontend funcional, CRUD de usuarios,
+recuperación, refresh tokens, conectores de email, creación/revisión de alertas
+y workflows de n8n.
 También quedan fuera dashboards, reportes, Gmail, IMAP y Microsoft Graph.
 
 Las APIs de contexto ofrecen GET/POST/PATCH; ADMIN/MANAGER escriben. Emails ofrecen
 POST/GET, con ingestión también para ANALYST. Todos los roles leen; no hay DELETE.
-EmailAnalysis, BECAlert y los contratos del analizador siguen siendo conceptuales.
-No se han agregado endpoints de negocio ficticios ni integraciones IA.
+EmailAnalysis y endpoints de análisis están implementados; BECAlert sigue siendo
+conceptual. No hay frontend de análisis ni workflow de n8n.

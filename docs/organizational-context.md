@@ -1,8 +1,9 @@
 # Contexto organizacional — Fase 3
 
 FastAPI administra ejecutivos y proveedores conocidos en `public`. Este contexto
-se reutilizará en análisis posteriores; hoy no detecta fraude ni calcula riesgo.
-No hay vistas React, ingestión de correos ni workflows de n8n.
+se reutiliza en el [motor BEC de Fase 5](bec-analysis.md), que consume registros
+activos. Los endpoints/lookups de contexto no calculan riesgo por sí mismos.
+No hay vistas React de gestión ni workflows de n8n.
 
 ## Modelos y normalización
 

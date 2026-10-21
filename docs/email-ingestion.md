@@ -1,7 +1,8 @@
 # Ingestión de emails — Fase 4
 
 BEC Guard incorpora correos normalizados como entrada persistente. **No determina
-legitimidad, tipo BEC ni riesgo.** No existen EmailAnalysis, alertas, reglas o LLM.
+legitimidad, tipo BEC ni riesgo al ingestar.** El análisis es una operación separada
+implementada en [Fase 5](bec-analysis.md); no hay alertas.
 
 ## Modelo y contrato
 
@@ -167,5 +168,5 @@ Los `.eml` sintéticos de tests cubren texto, HTML, multipart, charsets, headers
 attachments y rechazos. El corpus normalizado se explica en [dataset](dataset.md).
 
 Pendiente: conectores Gmail/Graph/IMAP, integración n8n y su autenticación machine-to-
-machine, reconstrucción de hilos, análisis de attachments y frontend. **Fase 5 no
-está implementada:** no hay detector, similitud, scoring, clasificación, LLM ni alertas.
+machine, reconstrucción de hilos, análisis de attachments y frontend. Fase 5 añade
+detector, similitud, scoring, clasificación y LLM en endpoints separados; sin alertas.

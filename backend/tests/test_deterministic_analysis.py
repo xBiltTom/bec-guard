@@ -104,6 +104,14 @@ def test_vendor_mismatch_and_lookalike(email_payload, context):
     assert result.bec_type == BECType.VENDOR_FRAUD
 
 
+def test_single_word_vendor_name(email_payload, context):
+    context.vendors[0].name = "Acme"
+    result = assess(
+        email_payload, context, sender_name="Acme", sender_email="billing@outside.example"
+    )
+    assert "VENDOR_IDENTITY_MISMATCH" in codes(result)
+
+
 @pytest.mark.parametrize(
     "reply,weight",
     [

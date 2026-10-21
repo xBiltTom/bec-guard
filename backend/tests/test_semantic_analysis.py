@@ -108,6 +108,9 @@ def test_valid_structured_output_and_prompt_injection(semantic_input, semantic_r
         {"risk_score": True},
         {"risk_score": "5"},
         {"bec_type": "LEGITIMATE"},
+        {"summary": "   "},
+        {"summary": "text\x00invalid"},
+        {"recommended_action": "text\x00invalid"},
         {"summary": ""},
         {"summary": "x" * 601},
         {"recommended_action": "x" * 401},
@@ -115,6 +118,7 @@ def test_valid_structured_output_and_prompt_injection(semantic_input, semantic_r
         {"signals": [{"code": "bad code", "description": "Test", "source": "SEMANTIC"}]},
         {"signals": [{"code": "TEST", "description": "x" * 241, "source": "SEMANTIC"}]},
         {"signals": [{"code": "TEST", "description": "Test", "source": "RULE"}]},
+        {"signals": [{"code": "TEST", "description": "text\x00invalid", "source": "SEMANTIC"}]},
         {"signals": [{"code": "TEST", "description": "Test", "source": "SEMANTIC"}] * 9},
     ],
 )
@@ -186,3 +190,13 @@ def test_settings_error_does_not_expose_keys():
     with pytest.raises(ValidationError) as error:
         LLMSettings(_env_file=None, llm_timeout_seconds="SECRET-SENTINEL", openai_api_key="secret")
     assert "SECRET-SENTINEL" not in str(error.value)
+
+
+def test_bank_redaction_keeps_json_valid(semantic_input, semantic_result):
+    email, det, context = semantic_input
+    context.vendors[0].bank_account_reference = 'REF-"[PRIVATE]'
+    email.body_text = 'Known ref-"[private] with case differences'
+    fake = FakeChat(semantic_result)
+    SemanticAnalyzer(LLMSettings(_env_file=None), lambda _: fake).assess(email, det, context)
+    payload = json.loads(fake.messages[1].content.split("\n")[1])
+    assert payload["body_text"] == "Known [KNOWN_BANK_REFERENCE_REDACTED] with case differences"

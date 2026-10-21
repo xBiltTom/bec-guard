@@ -75,6 +75,8 @@ La revisión histórica `0001_create_users` permanece intacta. 0002 normaliza
 identidades y reemplaza la unicidad de email. 0003 crea audit_log y su función/trigger
 append-only. 0004 añade executive_contacts y vendors con unicidad case-insensitive.
 0005 crea emails con UNIQUE exacto de Message-ID e índice de orden cronológico.
+0006 crea email_analysis con FK a emails, UNIQUE email_id y CHECKs de resultado;
+no añade índices aparte de PK/UNIQUE. Ver [análisis BEC](bec-analysis.md).
 Alembic administra además `public.alembic_version`. No hay tipos enum
 SQL independientes. Al llegar a base se eliminan todas las tablas del dominio, y la tabla
 de versiones queda vacía. Al bajar solo a 0001 se conservan users pero se pierde

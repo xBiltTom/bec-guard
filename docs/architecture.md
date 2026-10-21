@@ -5,9 +5,11 @@
 BEC Guard es un proyecto académico de Ingeniería de Software para detectar y gestionar
 Business Email Compromise (BEC) / fraude ejecutivo. Se construye incrementalmente.
 
-**Fases 0, 1, 2A, 2B, 3 y 4:** scaffold, persistencia con Alembic, autenticación
+**Fases 0–5:** scaffold, persistencia con Alembic, autenticación
 JWT/Argon2id, contexto, ingestión de emails, parser MIME y auditoría atómica.
-Se conserva la pantalla de salud y la infraestructura local. No hay frontend de autenticación, análisis BEC ni IA.
+Fase 5 añade reglas, LangChain multiproveedor, scoring y EmailAnalysis persistido.
+Se conserva la pantalla de salud y la infraestructura local. No hay frontend de
+autenticación/análisis ni alertas.
 
 ## Arquitectura
 
@@ -31,10 +33,10 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 | --- | --- |
 | Frontend | Presentación y comunicación REST. Hoy muestra disponibilidad del backend; posteriormente permitirá revisión humana. |
 | FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Gestiona autenticación, contexto organizacional y auditoría; conserva la salud de infraestructura. |
-| PostgreSQL | User, AuditLog, ExecutiveContact, Vendor y Email en public; datos internos de n8n en su propio esquema. Las demás entidades son futuras. |
+| PostgreSQL | User, AuditLog, ExecutiveContact, Vendor, Email y EmailAnalysis en public; datos internos de n8n en su propio esquema. BECAlert sigue futuro. |
 | n8n | Orquestar recepción y llamadas a FastAPI en el futuro. Hoy solo se provisiona su instancia vacía. |
-| LangChain (futuro) | Facilitar análisis semántico dentro del backend, detrás de una interfaz propia. No determina el contrato del dominio. |
-| Adaptadores LLM (futuros) | Traducir solicitudes y respuestas de OpenAI, Gemini, Groq u otros al contrato neutral de BEC Guard. |
+| LangChain | Un chat model, prompt y structured output validado dentro del backend, sin agentes/tools. |
+| Adaptadores LLM | OpenAI, Gemini o Groq; solo se instancia el proveedor configurado al analizar. |
 
 ## Organización del backend
 
@@ -98,6 +100,12 @@ Los volúmenes `postgres_data` y `n8n_data` persisten los datos y la configuraci
 n8n. Sus claves de cifrado se generan y conservan en su volumen. No se exportan al
 repositorio. Los workflows exportados se guardarán en `n8n/workflows/`, sin secretos.
 
+Fase 5 implementa `Email → reglas/contexto → semántica → scoring → EmailAnalysis`.
+POST bloquea el Email para serializar análisis concurrentes y reutilizar COMPLETED;
+ERROR es persistido/reintentable con riesgo null. Análisis y evento comparten un
+commit. No cambia el estilo síncrono ni incorpora servicios adicionales.
+Políticas y límites: [análisis BEC](bec-analysis.md).
+
 ## Flujo futuro (solo diseño)
 
 ```mermaid
@@ -120,9 +128,9 @@ flowchart TD
 
 FastAPI será responsable de combinar señales y validar el resultado; un proveedor
 LLM no decidirá por sí solo acciones financieras ni sustituirá la revisión humana.
-El scoring y los criterios de creación de alertas todavía no están definidos.
+El scoring hybrid-v1 ya existe; los criterios de creación de alertas siguen pendientes.
 Cambiar de proveedor no deberá modificar consumidores REST ni entidades de negocio.
-No se implementan ahora interfaces vacías de IA, agentes, prompts ni SDKs.
+Fase 5 incorpora prompts/SDKs con consumidores reales; no se implementan agentes.
 
 ## Referencias técnicas
 

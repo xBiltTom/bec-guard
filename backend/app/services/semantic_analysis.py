@@ -1,6 +1,7 @@
 """One prompt and one structured chat invocation. No tools or external actions."""
 
 import json
+import re
 from collections.abc import Callable
 from enum import StrEnum
 
@@ -101,13 +102,16 @@ def build_messages(
     }
     # No context object serialization: banks, internal users, credentials and audit
     # never enter the prompt. Also redact known references if quoted in the email.
+    for field in ("sender_name", "sender_email", "reply_to", "subject", "body_text"):
+        for vendor in context.vendors:
+            if vendor.bank_account_reference and data[field]:
+                data[field] = re.sub(
+                    re.escape(vendor.bank_account_reference),
+                    "[KNOWN_BANK_REFERENCE_REDACTED]",
+                    data[field],
+                    flags=re.I,
+                )
     encoded = json.dumps(data, ensure_ascii=False)
-    for vendor in context.vendors:
-        if vendor.bank_account_reference:
-            encoded = encoded.replace(
-                json.dumps(vendor.bank_account_reference, ensure_ascii=False)[1:-1],
-                "[KNOWN_BANK_REFERENCE_REDACTED]",
-            )
     return [
         SystemMessage(content=SYSTEM_PROMPT),
         HumanMessage(

@@ -41,11 +41,11 @@ def domain(address: str) -> str:
     return address.rsplit("@", 1)[-1].lower()
 
 
-def name_matches(display: str, known: str) -> bool:
+def name_matches(display: str, known: str, *, min_tokens: int = 2) -> bool:
     # Whole normalized tokens, allowing titles/additional surnames, never a first
     # name alone. A matching name needs an address mismatch to become a signal.
     tokens, expected = set(re.findall(r"\w+", display)), set(re.findall(r"\w+", known))
-    return len(expected) >= 2 and expected <= tokens
+    return len(expected) >= min_tokens and expected <= tokens
 
 
 def assess_deterministically(
@@ -89,7 +89,7 @@ def assess_deterministically(
                 )
     if not legitimate_vendor:
         for vendor in context.vendors:
-            if name_matches(display, normalize_text(vendor.name)):
+            if name_matches(display, normalize_text(vendor.name), min_tokens=1):
                 add(
                     "VENDOR_IDENTITY_MISMATCH",
                     "Nombre de proveedor conocido con dominio/contacto distinto.",

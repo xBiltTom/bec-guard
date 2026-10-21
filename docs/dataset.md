@@ -3,7 +3,8 @@
 `datasets/bec_eval.jsonl` contiene **140 casos ficticios** para desarrollo, regresión
 y evaluación académica inicial. No son correos reales ni un benchmark representativo
 del mundo real. No permiten afirmar precisión del futuro detector en producción.
-No hay clasificador implementado en esta fase.
+Fase 5 implementa el motor y una regresión exclusiva de development, sin evaluación
+formal de holdout.
 
 ## Conteos y separación
 
@@ -115,5 +116,8 @@ un Message-ID duplicado y casos inválidos de From/Reply-To/Date/Message-ID/char
 Los límites de tamaño, cuerpo y estructura se prueban con mensajes generados en
 memoria; no se versionan archivos gigantes. Ver [ingestión](email-ingestion.md).
 
-No usar este fixture como dataset real-world, no importar su metadata como entrada
-del detector y no agregar reglas de detección en esta fase. **Fase 5 pendiente.**
+No usar este fixture como dataset real-world ni importar su metadata como entrada
+del detector. `uv run python -m app.scripts.check_development` ejecuta reglas sobre
+98 development con contexto sintético en memoria; `--llm` habilita llamadas externas
+explícitas. No ofrece opción holdout ni persiste datos/labels. Solo imprime
+agregados. Ver [regresión y límites](bec-analysis.md#regresión-de-development-y-límites).

@@ -246,7 +246,7 @@ con los campos planos de ingestión; su implementación sigue pendiente.
 | Backend | uv sync --frozen, Ruff check y format --check aprobados. Sin nuevas dependencias ni cambios de lockfile. |
 | Frontend | npm ci, lint, format:check y build aprobados. El intento offline requirió descargar una dependencia ausente; validación completada. Sin cambios frontend. |
 | Docker | Compose config válido, imagen reconstruida y backend actualizado healthy. Migración explícita 0004 → 0005 aplicada sin datos de prueba en desarrollo. |
-| CI | Workflow y servicios sin cambios: PostgreSQL efímero solo backend, sin n8n. CI remoto de Fase 4 pendiente; no se hizo push. |
+| CI | Workflow y servicios sin cambios: PostgreSQL efímero solo backend, sin n8n. CI remoto posterior de Fase 4 SUCCESS en f777f283b50ca4126d5b6a1573d5366a377590ab, confirmado por el usuario al iniciar Fase 5. |
 
 También se probó un proceso Uvicorn real sobre PostgreSQL descartable: MIME → DTO →
 POST, duplicado 409, resumen/detalle, errores sanitizados, permisos con el mismo
@@ -273,5 +273,53 @@ No se conservan raw MIME, attachments o todos los headers. Sin Message-ID o fech
 aware, MIME queda fuera del MVP. El corpus es sintético y holdout no se utilizará
 para calibrar reglas. CLI de dataset desde el checkout del host; corpus no incluido
 en la imagen API. Ver [ingestión](email-ingestion.md) y [dataset](dataset.md).
-**Fase 5 no fue implementada:** sin reglas, similitud, scoring, clasificación,
+Al cerrar Fase 4 todavía no se había implementado Fase 5: sin reglas, similitud, scoring, clasificación,
 EmailAnalysis, BECAlert, LangChain/LLM, conectores, workflows ni frontend de emails.
+
+## Fase 5: motor BEC completo
+
+Inicio: `main` limpia en `f777f283b50ca4126d5b6a1573d5366a377590ab`, con CI remoto
+de Fase 4 **SUCCESS**, según confirmación del usuario. Se completaron checkpoints
+5A, 5B, 5C y 5D con commits locales separados, sin push. No se implementó Fase 6.
+
+5A pasó 29 pruebas de reglas/contexto y Ruff. 5B pasó 54 pruebas unitarias de
+reglas/semántica. 5C pasó la suite completa de 346 pruebas con PostgreSQL real.
+5D amplía integración, privacidad de salida, nombres de proveedores y regresión.
+
+| Comprobación final | Resultado |
+| --- | --- |
+| Backend con PostgreSQL 18 real | 358 pruebas: 228 unitarias y 130 de integración; 115 nuevas frente a las 243 de Fase 4. |
+| Reglas y contexto | Ejecutivo legítimo/suplantado, vendor legítimo/lookalike/contacto externo, nombre de proveedor de una palabra, Reply-To, Return-Path, auth fail, pagos, urgencia aislada, bank change, datos y hard negatives. |
+| Semántica sin red | Factory real de los tres adaptadores y schema nativo sin invocación externa; fakes para salida válida/inválida, timeout, provider error, ausencia/config inválida y prompt injection. |
+| Privacidad | No se registran keys/body/prompt/raw output; referencias bancarias conocidas redactadas aun con casing/quotes; NUL y texto vacío semántico rechazados. LangSmith tracing desactivado durante la invocación. |
+| Scoring | Pesos fijos det-v1; media 50/50 hybrid-v1 con floor 70 cuando det>=70; límites 39/40, 69/70 y 84/85 comprobados. |
+| API/persistencia | POST/GET, RBAC actual por DB, 400/401/403/404, COMPLETED idempotente, ERROR con riesgo null, HTTP 502/503 y retry conservando UUID. |
+| Concurrencia e integridad | Dos solicitudes del mismo Email producen una fila y una llamada; FK/UNIQUE/CHECKs comprobados con PostgreSQL. |
+| Auditoría | EMAIL_ANALYZED/EMAIL_ANALYSIS_FAILED sin datos del correo; fallo de auditoría revierte creación/error/retry y conserva el resultado anterior. Trigger append-only histórico intacto. |
+| Migraciones | head → 0005 → head y head → base → head correctos en BD descartable; ciclos históricos conservados. Alembic check sin diferencias. 0001–0005 intactas. |
+| Ruff/lock | uv sync --frozen, Ruff check y format --check aprobados. Python 3.14 y dependencias existentes conservados. |
+| Dataset | Validación estructural heredada de los 140 casos aprobada. Sin cambios al corpus/contexto. |
+| Regresión development | Solo 98 casos: legítimos 70, scores 0–26 (media 3.83); BEC 28, scores 15–90 (media 62.64). Los 21 hard negatives legítimos LOW. Sin llamadas LLM reales. |
+| Holdout | No se evaluó ni se usó contenido/labels para tuning. Solo las validaciones estructurales heredadas. Test sentinel impide acceder a email/labels holdout desde el harness. |
+| Frontend | npm ci, lint, format:check y build aprobados; sin modificaciones del frontend. |
+| CI | actionlint 1.7.12 aprobado. Workflow sin cambios; PostgreSQL efímero, sin API keys, proveedores, n8n ni servicios nuevos durante tests. |
+| Docker/Compose | Config válido, imagen backend reconstruida con dependencias fijadas, backend actualizado healthy y upgrade 0005→0006 aplicado en desarrollo. Alembic check desde la imagen sin diferencias. |
+| Salud/OpenAPI | API y proxy frontend /health 200, n8n readiness 200. OpenAPI: 16 operaciones en 11 paths, incluidas las dos rutas de análisis. |
+| n8n intacto | Metadata anterior/posterior idéntica: 160 tablas, 1270 columnas y 1429 constraints. Sin workflows ni cambios a su esquema/volúmenes. |
+
+El harness `python -m app.scripts.check_development` no escribe DB ni imprime
+cuerpos. La opción explícita `--llm` permite semántica; no se ejecutó contra
+proveedores reales durante esta fase. Las pruebas cubren también su camino
+híbrido con fake y que los errores nunca entran como LOW al resumen.
+
+Se conserva un aviso de deprecación en google-genai sobre `_UnionGenericAlias`
+con Python 3.14; no se oculta globalmente ni afecta a las pruebas. Las pruebas
+con fakes verifican integración/contrato, no calidad real o inmunidad del LLM.
+Reglas y corpus sintético no permiten afirmar precisión en producción.
+Los detalles funcionales y límites se documentan en [motor BEC](bec-analysis.md).
+
+Los ciclos destructivos se limitaron a PostgreSQL 18 descartable. En desarrollo
+solo se aplicó upgrade; email_analysis quedó con cero filas, sin datos sintéticos
+ni auditoría de pruebas. Las migraciones históricas, frontend, dataset, workflow CI
+y n8n/workflows conservan diff vacío respecto a Fase 4. La ejecución remota de
+Fase 5 queda para un push posterior del usuario; no se hizo push en esta fase.

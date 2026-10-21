@@ -1,28 +1,23 @@
 # Contratos de API y análisis
 
-## Autenticación implementada (Fase 2B)
+## Autenticación, contexto e ingestión
 
-`POST /api/auth/login` recibe JSON email/password y devuelve un access token.
-`GET /api/auth/me` requiere Bearer y devuelve únicamente la identidad segura.
-Contratos, códigos de error y ejemplos: [autenticación](authentication.md#contratos-http).
+`POST /api/auth/login` recibe email/password y devuelve access token.
+`GET /api/auth/me` requiere Bearer y devuelve identidad segura.
+Ver [autenticación](authentication.md#contratos-http).
 
-## Contexto organizacional implementado (Fase 3)
+GET/POST de `/api/executives` y `/api/vendors`, GET/PATCH por UUID, paginación y
+RBAC: [contexto organizacional](organizational-context.md#contratos-http).
+No hay DELETE.
 
-GET/POST de `/api/executives` y `/api/vendors`, GET/PATCH por UUID, paginación,
-RBAC y respuestas: [contratos de contexto](organizational-context.md#contratos-http).
-No hay DELETE ni endpoints de análisis BEC.
+`POST /api/emails` recibe EmailIngestRequest; GET colección devuelve resúmenes sin
+body_text; GET por UUID devuelve detalle. Sin PATCH/DELETE ni upload MIME.
+Contrato, límites y RBAC: [ingestión](email-ingestion.md). Se rechaza metadata de
+dataset: label, split, expected_bec_type e is_hard_negative no son entrada del motor.
 
-## Ingestión implementada (Fase 4)
+## GET /health
 
-`POST /api/emails` recibe EmailIngestRequest normalizado; GET colección devuelve
-EmailSummaryResponse sin body_text y GET por UUID EmailDetailResponse. Sin PATCH
-ni DELETE. El parser MIME es interno, no otro endpoint. Contrato, campos, límites,
-RBAC y códigos: [ingestión](email-ingestion.md). Se rechaza toda metadata de dataset.
-
-## Implementado: GET /health
-
-No requiere autenticación. Verifica FastAPI y conectividad real a PostgreSQL
-con `SELECT 1`; no crea ni modifica datos.
+Sin autenticación. Comprueba API y PostgreSQL mediante SELECT 1; no escribe.
 
 HTTP 200:
 
@@ -30,101 +25,109 @@ HTTP 200:
 {"status": "ok", "service": "bec-guard-api"}
 ```
 
-Si la conexión falla, responde HTTP 503, sin detalles de conexión ni credenciales:
+Fallo de BD: HTTP 503, sin detalles de conexión:
 
 ```json
 {"detail": "Database unavailable"}
 ```
 
-El frontend muestra “Backend conectado ✓” solo tras validar una respuesta 200
-con el contrato esperado. Un timeout, error de red, HTTP no exitoso o respuesta
-incompatible se muestra como no disponible. Se puede reintentar manualmente.
+## POST /api/emails/{email_id}/analyze
 
-## Futuro: Email → BEC Analyzer → BECAnalysisResult
+Implementado en Fase 5. Bearer obligatorio; ADMIN/MANAGER/ANALYST pueden ejecutar,
+AUDITOR recibe 403. No recibe body: carga el Email persistido y contexto activo,
+aplica reglas, semántica LangChain y scoring híbrido, y guarda EmailAnalysis con
+auditoría atómica. Nunca crea BECAlert ni ejecuta recomendaciones.
 
-**Este contrato es documentación; no hay endpoint de análisis, esquema ejecutable
-de IA ni llamadas a proveedores.** Es un contrato interno de aplicación y no el
-formato nativo de ninguna API LLM. La ingestión ya existe como POST /api/emails;
-el endpoint de análisis es futuro.
+HTTP 200: EmailAnalysisResponse COMPLETED, creado o reutilizado. Si ya existe
+COMPLETED no llama otra vez al proveedor ni genera otro evento. Si existe ERROR,
+recalcula y actualiza la misma fila/UUID. UNIQUE email_id y bloqueo de Email
+serializan solicitudes concurrentes; no hay historial de ejecuciones.
 
-### Entrada: Email normalizado
-
-El analizador futuro consumirá la representación normalizada persistida en Fase 4,
-con UUID interno y Message-ID. La entrada de POST no recibe el UUID ni ingested_at.
-Ejemplo del subconjunto relevante para el futuro analizador:
+Ejemplo ilustrativo (50% de 80 + 50% de 90 = 85):
 
 ```json
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "message_id": "<sample@correo.example>",
-  "sender_name": "Dirección Ficticia",
-  "sender_email": "direccion@organizacion.example",
-  "reply_to": null,
-  "to_recipients": ["finanzas@organizacion.example"],
-  "cc_recipients": [],
-  "subject": "Solicitud de transferencia urgente",
-  "body_text": "Necesito que revises esta transferencia con urgencia.",
-  "received_at": "2026-10-20T15:00:00Z"
-}
-```
-
-El contrato completo de ingestión incluye Return-Path y Authentication-Results
-seleccionados, con emails/fechas/límites validados. El parser MIME transforma el
-mensaje al mismo schema; no se guarda raw MIME ni attachments. No se confía en
-nombres visibles ni en el contenido como instrucciones del sistema. La metadata
-del dataset nunca forma parte de esta entrada.
-
-El analizador obtendrá el contexto organizacional desde servicios del backend.
-El frontend y n8n no tendrán que construir prompts ni suministrar credenciales LLM.
-
-### Salida: BECAnalysisResult
-
-```json
-{
-  "risk_score": 82,
-  "risk_level": "HIGH",
+  "id": "550e8400-e29b-41d4-a716-446655440001",
+  "email_id": "550e8400-e29b-41d4-a716-446655440000",
+  "status": "COMPLETED",
+  "deterministic_score": 80,
+  "semantic_score": 90,
+  "risk_score": 85,
+  "risk_level": "CRITICAL",
   "bec_type": "EXECUTIVE_IMPERSONATION",
   "signals": [
     {
-      "code": "AUTHORITY_PRESSURE",
-      "description": "El mensaje invoca autoridad y solicita una acción urgente.",
-      "source": "SEMANTIC"
+      "code": "EXECUTIVE_IDENTITY_MISMATCH",
+      "description": "Nombre ejecutivo conocido con dirección no oficial.",
+      "source": "CONTEXT",
+      "contribution": 35
+    },
+    {
+      "code": "BYPASS_APPROVAL",
+      "description": "La solicitud intenta omitir una aprobación independiente.",
+      "source": "SEMANTIC",
+      "contribution": 0
     }
   ],
-  "summary": "Solicitud que requiere verificar la identidad del remitente.",
-  "recommended_action": "Confirmar la solicitud por un canal independiente."
+  "summary": "Solicitud con indicios de suplantación que requiere verificación.",
+  "recommended_action": "Confirmar por un canal independiente conocido.",
+  "provider": "openai",
+  "model": "<CONFIGURED_MODEL>",
+  "policy_version": "det-v1/semantic-v1/hybrid-v1",
+  "error_code": null,
+  "analyzed_at": "2026-10-21T05:00:00Z"
 }
 ```
 
-El ejemplo es ilustrativo y no representa un cálculo implementado.
+Las señales del ejemplo están abreviadas; no representan todas las contribuciones
+del score ilustrativo. El backend devuelve la lista completa calculada.
 
-| Campo | Contrato previsto |
+| Campo | Contrato |
 | --- | --- |
-| risk_score | Entero de 0 a 100 inclusive; no es una probabilidad calibrada. |
-| risk_level | Uno de LOW, MEDIUM, HIGH, CRITICAL. La relación con el score dependerá de la política versionada del motor. |
-| bec_type | Uno de los valores BECType del dominio, o `null` si no hay patrón identificado. |
-| signals | Lista de señales; puede estar vacía. Cada señal contiene `code` estable, `description` legible y `source` (RULE, CONTEXT o SEMANTIC). |
-| summary | Texto no vacío, útil para revisión humana. |
-| recommended_action | Texto no vacío que recomienda una acción; no la ejecuta. |
+| id / email_id | UUID del análisis actual y del Email. |
+| status | COMPLETED o ERROR. |
+| deterministic_score | Entero 0–100, siempre disponible. |
+| semantic_score / risk_score | Enteros 0–100 en COMPLETED; null en ERROR. No son probabilidades. |
+| risk_level | LOW 0–39, MEDIUM 40–69, HIGH 70–84, CRITICAL 85–100; null en ERROR. |
+| bec_type | EXECUTIVE_IMPERSONATION, VENDOR_FRAUD, BANK_ACCOUNT_CHANGE, SENSITIVE_DATA_REQUEST, OTHER o null. Siempre null bajo 40 y en ERROR. |
+| signals | code estable, description hasta 240, source RULE/CONTEXT/SEMANTIC, contribution 0–100. Semántica tiene contribution=0, pues participa mediante semantic_score. |
+| summary / recommended_action | Hasta 600/400 caracteres, no vacíos en COMPLETED; null en ERROR. |
+| provider / model | Configuración usada cuando está disponible; nullable en ERROR. Nunca claves. |
+| policy_version | Versiones determinista, prompt y scoring. |
+| error_code | Código fijo sanitizado en ERROR; null en COMPLETED. |
+| analyzed_at | Fecha de la última ejecución, con timezone UTC. |
 
-Todos los campos de salida son obligatorios, incluido `bec_type` aunque sea `null`.
-Un correo sin señales BEC puede producir `signals: []`, `bec_type: null` y un nivel
-LOW. Los umbrales, catálogo de señales y política de alertas se definirán en la
-fase del motor. No se debe utilizar el ejemplo como implementación de scoring.
+La clasificación final desde 40 prefiere el patrón observado por reglas/contexto
+y después el sugerido por semántica; puede ser null si ninguno identifica tipo.
+OTHER no significa legítimo. La ponderación, floor y precedencia exacta de tipos
+locales están en [política BEC](bec-analysis.md#scoring-híbrido-hybrid-v1).
 
-### Independencia de proveedor y errores
+## Fallo semántico
 
-El caso de uso futuro dependerá de una interfaz propia de análisis. Un adaptador
-podrá usar LangChain y OpenAI, Gemini, Groq u otro proveedor. El backend combinará
-reglas, contexto y análisis semántico para producir este resultado validado.
-Respuestas nativas, tokens y objetos de SDK no cruzarán este límite del dominio.
+POST devuelve HTTP 502 para timeout, fallo del proveedor o salida inválida; 503
+para configuración ausente/inválida. El cuerpo es EmailAnalysisResponse con
+status ERROR, error_code LLM_TIMEOUT / LLM_PROVIDER_ERROR / LLM_INVALID_OUTPUT /
+LLM_NOT_CONFIGURED. Conserva deterministic_score y señales RULE/CONTEXT. Los
+campos semántico/final, risk_level, bec_type, summary y recommended_action son null.
 
-Un timeout, fallo de proveedor o respuesta inválida será un error de análisis;
-**no se transformará en un resultado LOW**. El formato HTTP de dichos errores,
-reintentos y procesamiento asíncrono se definirá al implementar el caso de uso.
-Proveedor, modelo, versión de política y fechas se conservarán como metadatos de
-EmailAnalysis para auditoría sin alterar este contrato de resultado.
+**ERROR no es LOW ni LEGITIMATE ni score cero.** El resultado ERROR y
+EMAIL_ANALYSIS_FAILED quedan persistidos y pueden consultarse después. Repetir
+POST permite retry; no hay retry automático ni fallback a otro proveedor.
 
-Las claves de API solo existirán en configuración del backend. Las variables
-`LLM_PROVIDER`, `LLM_MODEL`, `OPENAI_API_KEY`, `GOOGLE_API_KEY` y `GROQ_API_KEY`
-están reservadas en `.env.example`, vacías y sin efecto en las fases actuales.
+Un fallo de persistencia/auditoría devuelve el 503 genérico `Database unavailable`
+y revierte el intento. Ese error de infraestructura no tiene el contrato de un
+ERROR semántico persistido. Las respuestas no incluyen raw output, prompt ni
+detalles internos del proveedor.
+
+## GET /api/emails/{email_id}/analysis
+
+Los cuatro roles autenticados leen EmailAnalysisResponse, con HTTP 200 tanto
+para COMPLETED como ERROR. HTTP 404 si no existe Email o si no tiene análisis.
+No dispara LLM ni modifica/audita el resultado.
+
+Ambas rutas: 401 para token ausente/inválido o usuario inactivo; 400 para UUID
+inválido; POST 404 para Email inexistente antes de crear/configurar un modelo.
+Se consulta siempre User actual en PostgreSQL para autorización.
+
+La API puede arrancar sin claves LLM. Configuración, seguridad, prompt injection,
+límites y pruebas sin red: [motor BEC](bec-analysis.md).

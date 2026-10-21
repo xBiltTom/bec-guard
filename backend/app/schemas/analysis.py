@@ -1,7 +1,7 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from app.models.enums import AnalysisStatus, BECType, RiskLevel
 
@@ -34,6 +34,13 @@ class SemanticSignal(BaseModel):
     description: Description
     source: Literal["SEMANTIC"]
 
+    @field_validator("description")
+    @classmethod
+    def reject_nul(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("Invalid description")
+        return value
+
 
 class SemanticAssessment(BaseModel):
     model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
@@ -41,8 +48,17 @@ class SemanticAssessment(BaseModel):
     risk_score: Score
     bec_type: BECType | None
     signals: list[SemanticSignal] = Field(max_length=8)
-    summary: str = Field(min_length=1, max_length=600)
-    recommended_action: str = Field(min_length=1, max_length=400)
+    summary: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=600)]
+    recommended_action: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=400)
+    ]
+
+    @field_validator("summary", "recommended_action")
+    @classmethod
+    def reject_nul(cls, value: str) -> str:
+        if "\x00" in value:
+            raise ValueError("Invalid semantic text")
+        return value
 
 
 class EmailAnalysisResponse(BaseModel):

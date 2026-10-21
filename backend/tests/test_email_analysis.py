@@ -356,3 +356,47 @@ def test_unique_email_and_foreign_key(api_client, analysis_setup, db_session):
         db_session.commit()
     assert error.value.orig.sqlstate == "23503"
     db_session.rollback()
+
+
+def test_api_through_langchain_structured_boundary(api_app, api_client, analysis_setup):
+    from langchain_core.runnables import RunnableLambda
+
+    from app.services.semantic_analysis import SemanticAnalyzer
+
+    email, stub, headers = analysis_setup
+    messages_seen = []
+
+    class Chat:
+        def with_structured_output(self, schema, *, method):
+            assert schema is SemanticAssessment and method == "json_schema"
+
+            def invoke(messages):
+                messages_seen.extend(messages)
+                return stub.assess(None, None, None).model_dump()
+
+            return RunnableLambda(invoke)
+
+    api_app.dependency_overrides[get_analyzer_factory] = lambda: (
+        lambda: SemanticAnalyzer(stub.settings, lambda _: Chat())
+    )
+    response = api_client.post(f"/api/emails/{email.id}/analyze", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["risk_score"] == 95
+    assert len(messages_seen) == 2 and "UNTRUSTED" in messages_seen[0].content
+    assert stub.calls == 1
+
+
+def test_retry_audit_failure_preserves_previous_error(api_client, analysis_setup, db_session):
+    email, fake, headers = analysis_setup
+    fake.failure = LLMErrorCode.TIMEOUT
+    previous = api_client.post(f"/api/emails/{email.id}/analyze", headers=headers).json()
+    fake.failure = None
+    with pytest.raises(IntegrityError):
+        analyze_email(
+            db_session,
+            email.id,
+            actor=User(id=uuid4(), role=Role.ADMIN),
+            analyzer_factory=lambda: fake,
+        )
+    current = api_client.get(f"/api/emails/{email.id}/analysis", headers=headers).json()
+    assert current == previous
