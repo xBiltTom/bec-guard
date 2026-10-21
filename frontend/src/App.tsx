@@ -11,6 +11,9 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { ApiError, message } from './api';
+import { Emails, EmailDetail } from './pages/Emails';
+import { ContextPage } from './pages/Context';
+import { Audit } from './pages/Audit';
 import { Dashboard } from './pages/Dashboard';
 import { Alerts } from './pages/Alerts';
 import { AlertDetail } from './pages/AlertDetail';
@@ -190,6 +193,17 @@ export function AppRoutes() {
           <Route index element={<Dashboard />} />
           <Route path="alerts" element={<Alerts />} />
           <Route path="alerts/:alertId" element={<AlertDetail />} />
+          <Route path="emails" element={<Emails />} />
+          <Route path="emails/:emailId" element={<EmailDetail />} />
+          <Route
+            path="executives"
+            element={<ContextPage key="executives" kind="executives" />}
+          />
+          <Route
+            path="vendors"
+            element={<ContextPage key="vendors" kind="vendors" />}
+          />
+          <Route path="audit" element={<Audit />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

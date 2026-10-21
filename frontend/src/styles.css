@@ -1034,3 +1034,32 @@ summary {
   overflow-wrap: anywhere;
   font-size: 0.9rem;
 }
+.row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.row-actions button {
+  padding: 7px 11px;
+  font-size: 0.8rem;
+  min-height: 36px;
+}
+.audit-filters label {
+  margin: 0;
+}
+.audit-filters input {
+  width: 260px;
+}
+.form-hint {
+  margin: 16px 0;
+}
+.table-wrap:focus-visible {
+  outline-offset: 3px;
+}
+table {
+  min-width: 820px;
+}
+th:first-child,
+td:first-child {
+  min-width: 115px;
+}
