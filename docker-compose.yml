@@ -68,6 +68,14 @@ services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.44.4
     environment:
+      AUTOMATION_API_KEY: ${AUTOMATION_API_KEY:-}
+      BEC_GUARD_BACKEND_URL: ${BEC_GUARD_BACKEND_URL:-http://backend:8000}
+      EXECUTIONS_DATA_SAVE_ON_ERROR: none
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_ON_PROGRESS: "false"
+      EXECUTIONS_DATA_SAVE_MANUAL_EXECUTIONS: "false"
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "24"
       DB_TYPE: postgresdb
       DB_POSTGRESDB_HOST: postgres
       DB_POSTGRESDB_PORT: "5432"
@@ -92,6 +100,7 @@ services:
         condition: service_healthy
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./n8n:/opt/bec-guard-n8n:ro
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5678/healthz/readiness').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
       interval: 10s

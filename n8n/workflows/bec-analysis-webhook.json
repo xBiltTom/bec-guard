@@ -1,0 +1,488 @@
+{
+  "id": "bec-guard-analysis-webhook",
+  "name": "BEC Guard — normalized email analysis",
+  "active": false,
+  "nodes": [
+    {
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "bec-guard/analyze",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "bec-guard-analyze",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "bec-guard-automation-header",
+          "name": "BEC Guard automation"
+        }
+      }
+    },
+    {
+      "id": "configuration",
+      "name": "Configuration",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "backend-url",
+              "name": "backend_url",
+              "value": "SET_BACKEND_URL_ON_IMPORT",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "ingest-email",
+      "name": "Ingest email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuration').item.json.backend_url + '/api/automation/emails' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $('Webhook').item.json.body }}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 150000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "bec-guard-automation-header",
+          "name": "BEC Guard automation"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "email-accepted",
+      "name": "Email accepted",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "condition",
+              "leftValue": "={{ [200, 201].includes($json.statusCode) && !!$json.body?.email?.id }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "analyze-email",
+      "name": "Analyze email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        880,
+        -100
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Configuration').item.json.backend_url + '/api/automation/emails/' + $json.body.email.id + '/analyze' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 150000,
+          "redirect": {
+            "redirect": {
+              "followRedirects": false
+            }
+          }
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "bec-guard-automation-header",
+          "name": "BEC Guard automation"
+        }
+      },
+      "retryOnFail": false,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "route-result",
+      "name": "Route result",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1100,
+        -100
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "condition",
+                    "leftValue": "={{ $json.body?.analysis?.status === 'ERROR' }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ERROR"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "condition",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body?.analysis?.status === 'COMPLETED' && ['HIGH', 'CRITICAL'].includes($json.body.analysis.risk_level) && !!$json.body.alert_id }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ALERT"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "condition",
+                    "leftValue": "={{ $json.statusCode === 200 && $json.body?.analysis?.status === 'COMPLETED' && ['LOW', 'MEDIUM'].includes($json.body.analysis.risk_level) && $json.body.alert_id === null }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "NO_ALERT"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "alert",
+      "name": "ALERT",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        -200
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ route: 'ALERT', email_id: $json.body.analysis.email_id, analysis_id: $json.body.analysis.id, alert_id: $json.body.alert_id, status: $json.body.analysis.status, risk_score: $json.body.analysis.risk_score, risk_level: $json.body.analysis.risk_level, bec_type: $json.body.analysis.bec_type, summary: $json.body.analysis.summary, recommended_action: $json.body.analysis.recommended_action }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "no_alert",
+      "name": "NO_ALERT",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        0
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({ route: 'NO_ALERT', email_id: $json.body.analysis.email_id, analysis_id: $json.body.analysis.id, alert_id: $json.body.alert_id, status: $json.body.analysis.status, risk_score: $json.body.analysis.risk_score, risk_level: $json.body.analysis.risk_level, bec_type: $json.body.analysis.bec_type, summary: $json.body.analysis.summary, recommended_action: $json.body.analysis.recommended_action }) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "error",
+      "name": "ERROR",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1360,
+        200
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "={{ JSON.stringify({route:'ERROR', status:'ERROR', error_code:$json.body?.analysis?.error_code || 'BACKEND_ANALYSIS_ERROR', email_id:$json.body?.analysis?.email_id || null, analysis_id:$json.body?.analysis?.id || null}) }}",
+        "options": {}
+      }
+    },
+    {
+      "id": "ingest-error",
+      "name": "Ingest ERROR",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        880,
+        300
+      ],
+      "parameters": {
+        "mode": "raw",
+        "jsonOutput": "{\"route\":\"ERROR\",\"status\":\"ERROR\",\"error_code\":\"BACKEND_INGEST_ERROR\"}",
+        "options": {}
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1600,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": "={{ $json.route === 'ERROR' ? ($json.error_code === 'LLM_NOT_CONFIGURED' ? 503 : 502) : 200 }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Configuration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Configuration": {
+      "main": [
+        [
+          {
+            "node": "Ingest email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest email": {
+      "main": [
+        [
+          {
+            "node": "Email accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email accepted": {
+      "main": [
+        [
+          {
+            "node": "Analyze email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ingest ERROR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze email": {
+      "main": [
+        [
+          {
+            "node": "Route result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route result": {
+      "main": [
+        [
+          {
+            "node": "ERROR",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ALERT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NO_ALERT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ERROR",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ALERT": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NO_ALERT": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ERROR": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest ERROR": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "none",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false
+  },
+  "pinData": {}
+}
