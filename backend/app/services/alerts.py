@@ -10,7 +10,7 @@ ALERT_THRESHOLD = 70
 
 
 def ensure_alert_for_analysis(
-    session: Session, analysis: EmailAnalysis, *, actor: User, peer: str | None = None
+    session: Session, analysis: EmailAnalysis, *, actor: User | None, peer: str | None = None
 ) -> BECAlert | None:
     """Ensure the alert in the caller's transaction; never commit separately."""
     if (

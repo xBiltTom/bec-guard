@@ -43,7 +43,7 @@ def analyze_email(
     session: Session,
     email_id: UUID,
     *,
-    actor: User,
+    actor: User | None,
     analyzer_factory: Callable[[], SemanticAnalyzer] = create_semantic_analyzer,
     peer: str | None = None,
 ) -> EmailAnalysis:

@@ -48,3 +48,9 @@ class LLMSettings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     google_api_key: SecretStr = SecretStr("")
     groq_api_key: SecretStr = SecretStr("")
+
+
+class AutomationSettings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=ROOT_ENV, extra="ignore", hide_input_in_errors=True)
+
+    automation_api_key: SecretStr = SecretStr("")

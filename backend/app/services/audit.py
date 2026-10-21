@@ -109,15 +109,15 @@ def record_context_event(
 
 
 def record_email_ingested(
-    session: Session, *, actor: User, email_id: UUID, peer: str | None = None
+    session: Session, *, actor: User | None, email_id: UUID, peer: str | None = None
 ) -> AuditLog:
     try:
         address = str(parse_ip(peer)) if peer else None
     except ValueError:
         address = None
     event = AuditLog(
-        actor_user_id=actor.id,
-        actor_role=actor.role,
+        actor_user_id=actor.id if actor else None,
+        actor_role=actor.role if actor else None,
         action=AuditAction.EMAIL_INGESTED.value,
         resource_type="email",
         resource_id=email_id,
@@ -132,7 +132,7 @@ def record_analysis_event(
     session: Session,
     action: AuditAction,
     *,
-    actor: User,
+    actor: User | None,
     analysis_id: UUID,
     peer: str | None = None,
 ) -> AuditLog:
@@ -143,8 +143,8 @@ def record_analysis_event(
     except ValueError:
         address = None
     event = AuditLog(
-        actor_user_id=actor.id,
-        actor_role=actor.role,
+        actor_user_id=actor.id if actor else None,
+        actor_role=actor.role if actor else None,
         action=action.value,
         resource_type="email_analysis",
         resource_id=analysis_id,
@@ -156,15 +156,15 @@ def record_analysis_event(
 
 
 def record_alert_created(
-    session: Session, *, actor: User, alert_id: UUID, peer: str | None = None
+    session: Session, *, actor: User | None, alert_id: UUID, peer: str | None = None
 ) -> AuditLog:
     try:
         address = str(parse_ip(peer)) if peer else None
     except ValueError:
         address = None
     event = AuditLog(
-        actor_user_id=actor.id,
-        actor_role=actor.role,
+        actor_user_id=actor.id if actor else None,
+        actor_role=actor.role if actor else None,
         action=AuditAction.BEC_ALERT_CREATED.value,
         resource_type="bec_alert",
         resource_id=alert_id,

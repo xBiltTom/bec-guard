@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.alerts import router as alerts_router
 from app.api.auth import router as auth_router
+from app.api.automation import router as automation_router
 from app.api.email_analysis import router as analysis_router
 from app.api.emails import router as emails_router
 from app.api.health import router as health_router
@@ -47,6 +48,7 @@ def create_app(
     application.include_router(emails_router)
     application.include_router(analysis_router)
     application.include_router(alerts_router)
+    application.include_router(automation_router)
     return application
 
 

@@ -1,17 +1,38 @@
+import secrets
 from typing import Annotated
 
 import jwt
 from fastapi import Depends, HTTPException, Request
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.core.config import AuthSettings
+from app.core.config import AuthSettings, AutomationSettings
 from app.core.database import get_session
 from app.core.tokens import decode_access_token
 from app.models import Role, User
 from app.services.audit import AuditAction, AuditReason, record_security_event
 
 bearer = HTTPBearer(auto_error=False)
+automation_header = APIKeyHeader(name="X-BEC-Automation-Key", auto_error=False)
+
+
+def get_automation_settings() -> AutomationSettings:
+    try:
+        return AutomationSettings()
+    except ValidationError:
+        raise HTTPException(503, "Automation unavailable") from None
+
+
+def require_automation_key(
+    key: Annotated[str | None, Depends(automation_header)],
+    settings: Annotated[AutomationSettings, Depends(get_automation_settings)],
+) -> None:
+    expected = settings.automation_api_key.get_secret_value()
+    if len(expected) < 32:
+        raise HTTPException(503, "Automation unavailable")
+    if not secrets.compare_digest((key or "").encode("utf-8"), expected.encode("utf-8")):
+        raise HTTPException(401, "Invalid automation credentials")
 
 
 def get_auth_settings(request: Request) -> AuthSettings:

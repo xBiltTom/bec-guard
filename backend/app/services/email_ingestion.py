@@ -1,4 +1,5 @@
 from fastapi import HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -8,7 +9,7 @@ from app.services.audit import record_email_ingested
 
 
 def ingest_email(
-    session: Session, data: EmailIngestRequest, *, actor: User, peer: str | None = None
+    session: Session, data: EmailIngestRequest, *, actor: User | None, peer: str | None = None
 ) -> Email:
     email = Email(**data.model_dump())
     session.add(email)
@@ -27,3 +28,20 @@ def ingest_email(
             raise HTTPException(409, "Message-ID already exists") from None
         raise
     return email
+
+
+def ingest_email_idempotently(
+    session: Session, data: EmailIngestRequest, *, peer: str | None = None
+) -> tuple[Email, bool]:
+    statement = select(Email).where(Email.message_id == data.message_id)
+    existing = session.scalar(statement)
+    if existing is not None:
+        return existing, False
+    try:
+        return ingest_email(session, data, actor=None, peer=peer), True
+    except HTTPException as error:
+        if error.status_code != 409:
+            raise
+        # Another transaction won the UNIQUE Message-ID race. ingest_email has
+        # rolled back; READ COMMITTED can now see the committed winner.
+        return session.execute(statement).scalar_one(), False
