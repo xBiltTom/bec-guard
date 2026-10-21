@@ -12,6 +12,13 @@ GET/POST de `/api/executives` y `/api/vendors`, GET/PATCH por UUID, paginación,
 RBAC y respuestas: [contratos de contexto](organizational-context.md#contratos-http).
 No hay DELETE ni endpoints de análisis BEC.
 
+## Ingestión implementada (Fase 4)
+
+`POST /api/emails` recibe EmailIngestRequest normalizado; GET colección devuelve
+EmailSummaryResponse sin body_text y GET por UUID EmailDetailResponse. Sin PATCH
+ni DELETE. El parser MIME es interno, no otro endpoint. Contrato, campos, límites,
+RBAC y códigos: [ingestión](email-ingestion.md). Se rechaza toda metadata de dataset.
+
 ## Implementado: GET /health
 
 No requiere autenticación. Verifica FastAPI y conectividad real a PostgreSQL
@@ -37,27 +44,35 @@ incompatible se muestra como no disponible. Se puede reintentar manualmente.
 
 **Este contrato es documentación; no hay endpoint de análisis, esquema ejecutable
 de IA ni llamadas a proveedores.** Es un contrato interno de aplicación y no el
-formato nativo de ninguna API LLM. La ruta REST de ingestión se decidirá después.
+formato nativo de ninguna API LLM. La ingestión ya existe como POST /api/emails;
+el endpoint de análisis es futuro.
 
 ### Entrada: Email normalizado
+
+El analizador futuro consumirá la representación normalizada persistida en Fase 4,
+con UUID interno y Message-ID. La entrada de POST no recibe el UUID ni ingested_at.
+Ejemplo del subconjunto relevante para el futuro analizador:
 
 ```json
 {
   "id": "550e8400-e29b-41d4-a716-446655440000",
-  "sender": {"name": "Dirección", "address": "direccion@example.org"},
-  "recipients": ["finanzas@example.com"],
+  "message_id": "<sample@correo.example>",
+  "sender_name": "Dirección Ficticia",
+  "sender_email": "direccion@organizacion.example",
+  "reply_to": null,
+  "to_recipients": ["finanzas@organizacion.example"],
+  "cc_recipients": [],
   "subject": "Solicitud de transferencia urgente",
   "body_text": "Necesito que revises esta transferencia con urgencia.",
   "received_at": "2026-10-20T15:00:00Z"
 }
 ```
 
-`id`, `sender.address`, `recipients` (al menos uno), `subject`, `body_text` y
-`received_at` son obligatorios; asunto y cuerpo pueden estar vacíos.
-`sender.name` es opcional y puede ser `null`. Se validarán direcciones y fechas.
-Los adjuntos, cabeceras de autenticación y MIME quedan fuera del contrato inicial;
-se revisarán al implementar ingestión. No se confía en nombres visibles ni en el
-contenido del correo como instrucciones del sistema.
+El contrato completo de ingestión incluye Return-Path y Authentication-Results
+seleccionados, con emails/fechas/límites validados. El parser MIME transforma el
+mensaje al mismo schema; no se guarda raw MIME ni attachments. No se confía en
+nombres visibles ni en el contenido como instrucciones del sistema. La metadata
+del dataset nunca forma parte de esta entrada.
 
 El analizador obtendrá el contexto organizacional desde servicios del backend.
 El frontend y n8n no tendrán que construir prompts ni suministrar credenciales LLM.

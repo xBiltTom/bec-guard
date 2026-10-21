@@ -155,4 +155,4 @@ y configura TEST_DATABASE_URL. CI conserva el servicio PostgreSQL efímero actua
 
 Quedan fuera de esta fase: frontend de gestión, CRUD de usuarios, múltiples emails/
 dominios por entidad, validación bancaria específica, ingestión, análisis BEC,
-scoring, LLM, alertas y workflows de n8n. **Fase 4 no está implementada.**
+scoring, LLM, alertas y workflows de n8n. La ingestión se incorpora en [Fase 4](email-ingestion.md); la detección BEC sigue pendiente.

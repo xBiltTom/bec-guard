@@ -196,7 +196,7 @@ Vendor y sus APIs backend, usando la autenticación, RBAC y auditoría existente
 | Metadata/constraints | Tablas, índices UNIQUE funcionales, timestamps con timezone y alembic check correctos. Revisiones 0001–0003 sin modificar. |
 | Backend | uv sync --frozen, Ruff check y format --check aprobados. Sin dependencias nuevas. |
 | Frontend | npm ci y lint/format:check/build aprobados; ningún archivo frontend modificado. |
-| CI | actionlint válido; workflow y PostgreSQL efímero sin cambios. CI remoto de Fase 3 pendiente; no se hizo push. |
+| CI | actionlint válido; workflow y PostgreSQL efímero sin cambios. CI remoto de Fase 3 SUCCESS sobre 60bea5a; push posterior realizado por el usuario. |
 | Docker | Compose config válido; imagen backend construida, upgrade y alembic check desde esa imagen correctos; cuatro servicios healthy. |
 
 Un proceso Uvicorn real conectado a la BD descartable pasó login, creación de ambos
@@ -213,10 +213,65 @@ Compose, frontend ni CI. Los ciclos destructivos se limitaron a la BD de tests.
 
 TestClient, conexiones a PostgreSQL, Uvicorn y Docker se validaron fuera del sandbox
 por sus restricciones de sockets. No quedaron validaciones locales pendientes.
-La validación remota de esta fase corresponderá al próximo push del usuario.
+El usuario confirmó que el CI remoto de Fase 3 sobre
+`60bea5a714cc2f6908556459297b869c7d257eac` terminó en **SUCCESS**.
 
 Limitaciones y decisiones menores: dominios ASCII/punycode sin DNS; un email por
 ejecutivo y un dominio por proveedor; listados como arrays; PATCH sin cambios no
 se audita; updated_at usa SQLAlchemy y SQL directo debe gestionarlo. Ver
 [contexto organizacional](organizational-context.md). No hay motor BEC, análisis,
 scoring, LLM, frontend de gestión ni workflows: **Fase 4 no fue implementada**.
+
+## Fase 4: emails, MIME y dataset controlado
+
+Se partió de `main` limpia en `60bea5a`, sincronizada con origin/main. No hubo
+bloqueos de arquitectura. El contrato conceptual antiguo del analizador se alineó
+con los campos planos de ingestión; su implementación sigue pendiente.
+
+| Comprobación final | Resultado |
+| --- | --- |
+| Suite backend con PostgreSQL 18 real | **243 pruebas aprobadas**, sin omisiones: 140 unitarias y 103 de integración; 113 casos nuevos respecto a las 130 de Fase 3. |
+| Ingestión | Persistencia completa, UUID, UTC, JSONB de destinatarios, normalización y Message-ID único exacto. Duplicado por API/SQL rechazado; distinto casing conserva identidad independiente. |
+| API | POST 201, GET summary/detail 200, paginación cronológica y desempate por UUID; summary sin body_text; sin PATCH/DELETE. Errores 400/401/403/404/409/503 comprobados. |
+| RBAC | ADMIN/MANAGER/ANALYST ingieren, AUDITOR solo lee. Los cuatro roles leen; cambios de rol/actividad en DB afectan al JWT existente. |
+| Auditoría | EMAIL_INGESTED con actor/rol, recurso, peer directo y details null; sin direcciones, subject, body, Message-ID, MIME, hash o JWT. |
+| Atomicidad | FK de actor inexistente revierte Email y AuditLog. Un trigger temporal de fallo de INSERT en auditoría devuelve 503 y deja ambas tablas sin filas del intento. El trigger append-only original permanece intacto. |
+| MIME | **38 casos**: 15 fixtures .eml sintéticos más mensajes en memoria; plain/alternative/HTML, UTF-8/Latin-1, headers seleccionados, attachments ignorados y mensajes no soportados rechazados. |
+| Contrato normalizado | **36 casos**: listas deduplicadas, campos opcionales, NUL/LF, longitudes, fechas aware/UTC y rechazo de metadata de evaluación. Fechas que desbordan UTC se rechazan limpiamente. |
+| Límites MIME | 2 MiB raw, 200k caracteres de cuerpo, 998 de subject/Message-ID, 4096 de Authentication-Results, 100 destinatarios, profundidad 20 y 256 partes visitadas; duplicados de metadata MIME rechazados. |
+| Dataset | **22 pruebas** y CLI aprobados. 140 casos, 100 LEGITIMATE/40 BEC, development 98/holdout 42, 30 hard negatives; IDs únicos, emails válidos, metadata separada y dominios reservados. |
+| Tipos anotados BEC | 12 EXECUTIVE_IMPERSONATION, 10 VENDOR_FRAUD, 8 BANK_ACCOUNT_CHANGE, 6 SENSITIVE_DATA_REQUEST, 4 OTHER. Solo ground truth, sin clasificador. |
+| Migraciones | Base limpia → head, head → 0004 → head y head → base → head aprobados en BD descartable. Se conservan los ciclos previos. 0001–0004 sin cambios. |
+| Metadata | alembic check sin diferencias en PostgreSQL descartable y desde la imagen backend contra desarrollo. |
+| Backend | uv sync --frozen, Ruff check y format --check aprobados. Sin nuevas dependencias ni cambios de lockfile. |
+| Frontend | npm ci, lint, format:check y build aprobados. El intento offline requirió descargar una dependencia ausente; validación completada. Sin cambios frontend. |
+| Docker | Compose config válido, imagen reconstruida y backend actualizado healthy. Migración explícita 0004 → 0005 aplicada sin datos de prueba en desarrollo. |
+| CI | Workflow y servicios sin cambios: PostgreSQL efímero solo backend, sin n8n. CI remoto de Fase 4 pendiente; no se hizo push. |
+
+También se probó un proceso Uvicorn real sobre PostgreSQL descartable: MIME → DTO →
+POST, duplicado 409, resumen/detalle, errores sanitizados, permisos con el mismo
+JWT y desactivación. AuditLog conservó el peer 127.0.0.1 frente a X-Forwarded-For
+falso; los logs no contenían subject, body, direcciones, Message-ID, password/hash
+ni token. OpenAPI ofrece **14 operaciones en 9 paths**, tres nuevas para emails.
+La BD descartable se revirtió a base después de esta comprobación.
+
+Los servicios de desarrollo estaban detenidos al comprobar infraestructura. Se
+iniciaron con sus volúmenes existentes, se reconstruyó backend y quedaron los
+cuatro healthy. API y proxy de frontend devuelven el contrato de salud; readiness
+de n8n responde 200. Antes/después de 0005, n8n mantuvo idénticas **160 tablas,
+1270 columnas y 1429 constraints**. No se tocaron sus tablas ni workflows.
+No se crearon emails ni eventos EMAIL_INGESTED de prueba en desarrollo.
+
+Las pruebas no usan SQLite ni servicios externos; EmailStr no consulta DNS.
+TestClient/HTTP local, PostgreSQL y Docker se ejecutaron fuera del sandbox por sus
+restricciones de sockets. No quedan verificaciones locales pendientes; la ejecución
+remota de esta fase corresponde al posterior push del usuario.
+
+Decisiones y límites: el parser usa stdlib, reemplaza bytes inválidos de charsets
+conocidos y rechaza charsets desconocidos; HTML se convierte sin ejecución/red.
+No se conservan raw MIME, attachments o todos los headers. Sin Message-ID o fecha
+aware, MIME queda fuera del MVP. El corpus es sintético y holdout no se utilizará
+para calibrar reglas. CLI de dataset desde el checkout del host; corpus no incluido
+en la imagen API. Ver [ingestión](email-ingestion.md) y [dataset](dataset.md).
+**Fase 5 no fue implementada:** sin reglas, similitud, scoring, clasificación,
+EmailAnalysis, BECAlert, LangChain/LLM, conectores, workflows ni frontend de emails.

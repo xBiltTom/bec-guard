@@ -5,15 +5,16 @@ Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combin
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fases 0, 1, 2A, 2B y 3.** Hay persistencia de User, AuditLog,
-ExecutiveContact y Vendor, autenticación backend con Argon2id y JWT, APIs de
-contexto organizacional protegidas por RBAC y auditoría atómica, y una pantalla mínima
+**Estado actual: Fases 0, 1, 2A, 2B, 3 y 4.** Hay persistencia de User, AuditLog,
+ExecutiveContact, Vendor y Email; autenticación Argon2id/JWT, contexto organizacional
+e ingestión normalizada con RBAC y auditoría atómica, parser MIME y dataset sintético.
+Se conserva una pantalla mínima
 que comprueba la salud de FastAPI y PostgreSQL. No hay frontend de autenticación.
-Todavía no se analizan correos ni se generan alertas.
+Se ingieren y consultan correos; todavía no se analizan ni se generan alertas.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
-exactamente un rol por usuario en el MVP. Fase 4 sigue pendiente.
+exactamente un rol por usuario en el MVP. Fase 5 sigue pendiente.
 
 ## Arquitectura y stack
 
@@ -40,6 +41,8 @@ Documentación:
 - [Persistencia, migraciones y base de pruebas](docs/persistence.md)
 - [Autenticación, bootstrap ADMIN, JWT, RBAC y auditoría](docs/authentication.md)
 - [Contexto organizacional, endpoints, permisos y lookups](docs/organizational-context.md)
+- [Ingestión de emails, parser MIME y privacidad](docs/email-ingestion.md)
+- [Dataset sintético, splits y validación](docs/dataset.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
 ## Requisitos
@@ -156,7 +159,7 @@ uv run ruff format --check .
 ```
 
 La suite verifica salud, passwords, JWT, bootstrap, login/me, RBAC, persistencia,
-migraciones, contexto organizacional y auditoría append-only. Las pruebas de
+migraciones, contexto, emails, parser MIME, dataset y auditoría append-only. Las pruebas de
 integración usan PostgreSQL real y requieren `TEST_DATABASE_URL`, una variable independiente de
 `.env`, apuntando a una base de pruebas vacía. Sin ella se omiten las de integración.
 Consulta [cómo levantar esa base y ejecutar la suite completa](docs/persistence.md#pruebas-de-integración).
@@ -215,10 +218,30 @@ uv run alembic check
 
 Para crear una revisión: `uv run alembic revision --autogenerate -m "describe change"`.
 Revisa el archivo generado antes de aplicarlo. Para revertir la última revisión:
-`uv run alembic downgrade -1`. Revertir 0004 elimina ejecutivos/proveedores;
+`uv run alembic downgrade -1`. Revertir 0005 elimina emails;
+revertir 0004 elimina ejecutivos/proveedores;
 revertir 0003 elimina la auditoría; llegar a base elimina también users. El ciclo
 destructivo se valida solo en la base de test.
 No se modifica el esquema `n8n`. Más detalles en [persistencia](docs/persistence.md).
+
+## Ingestión y dataset
+
+`POST /api/emails` recibe JSON normalizado; ADMIN/MANAGER/ANALYST pueden ingestar.
+Los cuatro roles leen `GET /api/emails` (resúmenes sin cuerpo) y
+`GET /api/emails/{id}` (detalle). Message-ID es obligatorio y único: repetirlo
+responde 409. No hay PATCH/DELETE ni endpoint de upload MIME. El parser interno
+convierte bytes RFC 5322/MIME al mismo contrato sin guardar raw MIME o attachments.
+
+El corpus sintético tiene 140 casos: 100 legítimos y 40 BEC, separados en development
+(98) y holdout (42), con 30 legítimos difíciles. Metadata de evaluación nunca entra
+a emails. Valídalo desde backend/, sin PostgreSQL:
+
+```bash
+uv run python -m app.scripts.validate_dataset
+```
+
+[Contrato, límites y parser](docs/email-ingestion.md) ·
+[Dataset y prevención de leakage](docs/dataset.md).
 
 ## Desarrollo de aplicaciones en el host
 
@@ -282,12 +305,12 @@ docker compose logs --tail=80 frontend
 ```text
 backend/
   app/
-    api/           # Salud, auth y contexto organizacional
+    api/           # Salud, auth, contexto y emails
     core/          # Settings y SQLAlchemy
-    models/        # Base, User, Role, AuditLog, ExecutiveContact y Vendor
+    models/        # Base y entidades persistentes, incluido Email
     schemas/       # Contratos HTTP separados
-    services/      # Auth, auditoría, contexto y lookups; sin motor BEC
-    scripts/       # CLI create_admin
+    services/      # Auth, auditoría, contexto, ingestión, MIME y dataset
+    scripts/       # CLI create_admin y validate_dataset
     main.py
   tests/
   migrations/      # Alembic: env.py, plantilla y versions/
@@ -300,6 +323,7 @@ frontend/
   Dockerfile
   package.json
   package-lock.json
+datasets/          # Corpus JSONL y contexto ficticio, sin importación automática
 n8n/workflows/      # Futuras exportaciones; hoy solo README
 docker/postgres/   # Inicialización del esquema de n8n
 docs/              # Arquitectura, dominio y contratos
@@ -309,15 +333,15 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente para Fase 4 y posteriores
+## Pendiente para Fase 5 y posteriores
 
-Fase 3 añade gestión backend de ejecutivos/proveedores, lookups exactos y auditoría
-atómica. Quedan pendientes frontend de autenticación y gestión, CRUD de usuarios,
-recuperación, refresh tokens, ingestión de correos y parser MIME, reglas BEC, scoring,
+Fase 4 añade persistencia/consulta de emails, ingestión normalizada, parser MIME
+y corpus sintético sin detección automática. Quedan pendientes frontend funcional,
+CRUD de usuarios, recuperación, refresh tokens, conectores de email, reglas BEC, scoring,
 LangChain, adaptadores LLM y prompts, revisión de alertas y workflows de n8n.
 También quedan fuera dashboards, reportes, Gmail, IMAP y Microsoft Graph.
 
-Las APIs de contexto ofrecen GET/POST/PATCH; todos los roles leen y solo ADMIN/
-MANAGER escriben. No existe DELETE. Las entidades de correo/análisis/alertas y
-los contratos de análisis siguen siendo diseño conceptual.
+Las APIs de contexto ofrecen GET/POST/PATCH; ADMIN/MANAGER escriben. Emails ofrecen
+POST/GET, con ingestión también para ANALYST. Todos los roles leen; no hay DELETE.
+EmailAnalysis, BECAlert y los contratos del analizador siguen siendo conceptuales.
 No se han agregado endpoints de negocio ficticios ni integraciones IA.

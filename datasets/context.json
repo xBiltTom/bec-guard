@@ -1,0 +1,52 @@
+{
+  "notice": "Contexto totalmente ficticio para evaluación académica; no importar automáticamente a desarrollo.",
+  "organization": "Luminaria Ficticia",
+  "executives": [
+    {
+      "name": "Nora Prisma",
+      "position": "Gerente general",
+      "email": "nora@luminaria.example"
+    },
+    {
+      "name": "Teo Bruma",
+      "position": "Director financiero",
+      "email": "teo@luminaria.example"
+    },
+    {
+      "name": "Elia Nexo",
+      "position": "Directora de operaciones",
+      "email": "elia@luminaria.example"
+    },
+    {
+      "name": "Lian Delta",
+      "position": "Director de tecnología",
+      "email": "lian@luminaria.example"
+    }
+  ],
+  "vendors": [
+    {
+      "name": "Cobre Azul Ficticio",
+      "domain": "cobreazul.example",
+      "contact_email": "facturas@cobreazul.example",
+      "bank_account_reference": "REF-FICTICIA-COBRE-01"
+    },
+    {
+      "name": "Papel Nube Ficticio",
+      "domain": "papelnube.example",
+      "contact_email": "ventas@papelnube.example",
+      "bank_account_reference": "REF-FICTICIA-PAPEL-02"
+    },
+    {
+      "name": "Circuito Prisma Ficticio",
+      "domain": "circuitoprisma.example",
+      "contact_email": "soporte@circuitoprisma.example",
+      "bank_account_reference": "REF-FICTICIA-CIRCUITO-03"
+    },
+    {
+      "name": "Ruta Violeta Ficticia",
+      "domain": "rutavioleta.example",
+      "contact_email": "cobros@rutavioleta.example",
+      "bank_account_reference": "REF-FICTICIA-RUTA-04"
+    }
+  ]
+}

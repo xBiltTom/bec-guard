@@ -1,0 +1,13 @@
+Message-ID: <html@fixtures.becguard.example>
+From:   Nora Prisma <NORA@LUMINARIA.EXAMPLE>
+To: finanzas@luminaria.example
+Subject: =?utf-8?q?Revisi=C3=B3n_sint=C3=A9tica?=
+Date: Tue, 20 Oct 2026 09:30:00 -0500
+MIME-Version: 1.0
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head><style>HIDDEN_STYLE</style><title>HIDDEN_TITLE</title></head><bod=
+y><p>Hola &amp; equipo</p><script>HIDDEN_SCRIPT</script><p>Texto visible.</p>=
+<img src=3D"https://remote.example/pixel"><a href=3D"https://portal.example/"=
+>Portal</a></body></html>

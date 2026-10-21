@@ -1,0 +1,48 @@
+Message-ID: <attachments@fixtures.becguard.example>
+From:   Nora Prisma <NORA@LUMINARIA.EXAMPLE>
+To: finanzas@luminaria.example
+Subject: =?utf-8?q?Revisi=C3=B3n_sint=C3=A9tica?=
+Date: Tue, 20 Oct 2026 09:30:00 -0500
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="===============4360174982840690026=="
+
+--===============4360174982840690026==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Cuerpo principal sin adjuntos.
+
+--===============4360174982840690026==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+Content-Disposition: attachment; filename="notes.txt"
+MIME-Version: 1.0
+
+ATTACHMENT_TEXT_MUST_NOT_APPEAR
+
+--===============4360174982840690026==
+Content-Type: application/octet-stream
+Content-Transfer-Encoding: base64
+Content-Disposition: attachment; filename="sample.bin"
+MIME-Version: 1.0
+
+QklOQVJZX0FUVEFDSE1FTlRfTVVTVF9OT1RfQVBQRUFS
+
+--===============4360174982840690026==
+Content-Type: message/rfc822
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+Content-Disposition: attachment
+
+Message-ID: <forwarded@fixtures.becguard.example>
+From:   Nora Prisma <NORA@LUMINARIA.EXAMPLE>
+To: finanzas@luminaria.example
+Subject: =?utf-8?q?Revisi=C3=B3n_sint=C3=A9tica?=
+Date: Tue, 20 Oct 2026 09:30:00 -0500
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+FORWARDED_BODY_MUST_NOT_APPEAR
+
+--===============4360174982840690026==--

@@ -89,7 +89,7 @@ def db_session(migrated_engine) -> Iterator[Session]:
                 connection.execute(
                     text(
                         "TRUNCATE public.audit_log, public.users, "
-                        "public.executive_contacts, public.vendors"
+                        "public.executive_contacts, public.vendors, public.emails"
                     )
                 )
 
@@ -136,3 +136,25 @@ def account(db_session):
     db_session.add(user)
     db_session.commit()
     return user
+
+
+@pytest.fixture
+def email_payload():
+    return {
+        "message_id": "<MiXeD-unit@fixtures.becguard.example>",
+        "thread_id": "conversation-1",
+        "sender_name": "  Nora Prisma  ",
+        "sender_email": " NORA@LUMINARIA.EXAMPLE ",
+        "reply_to": " REPLY@LUMINARIA.EXAMPLE ",
+        "return_path": " BOUNCE@LUMINARIA.EXAMPLE ",
+        "to_recipients": [
+            " FINANZAS@LUMINARIA.EXAMPLE ",
+            "finanzas@luminaria.example",
+            "team@luminaria.example",
+        ],
+        "cc_recipients": [" CC@LUMINARIA.EXAMPLE ", "cc@luminaria.example"],
+        "subject": "Asunto PRIVADO sin análisis",
+        "body_text": "Contenido PRIVADO\r\nSegunda línea\x00\rTercera línea",
+        "authentication_results": "mx.luminaria.example; spf=pass",
+        "received_at": "2026-10-20T09:30:00-05:00",
+    }

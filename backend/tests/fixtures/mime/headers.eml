@@ -1,0 +1,19 @@
+Message-ID: <headers@fixtures.becguard.example>
+From:   Nora Prisma <NORA@LUMINARIA.EXAMPLE>
+To: finanzas@luminaria.example
+Subject: =?utf-8?q?Revisi=C3=B3n_sint=C3=A9tica?=
+Date: Tue, 20 Oct 2026 09:30:00 -0500
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+Reply-To:  Soporte <SOPORTE@LUMINARIA.EXAMPLE>
+Return-Path: <BOUNCES@LUMINARIA.EXAMPLE>
+Cc:
+ Ana <ANA@LUMINARIA.EXAMPLE>, equipo@luminaria.example, ana@luminaria.example
+Authentication-Results:
+ mx.luminaria.example; spf=pass smtp.mailfrom=luminaria.example
+Authentication-Results:
+ mx.luminaria.example; dkim=pass header.d=luminaria.example; dmarc=pass
+X-Private-Header: DO_NOT_RETAIN_THIS_HEADER
+
+Mensaje sintético de prueba.

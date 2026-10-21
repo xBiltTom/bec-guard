@@ -159,6 +159,7 @@ haga TRUNCATE o cambie DDL. Los privilegios de producción quedan por definir.
   -> 0002_auth_identity_constraints
   -> 0003_create_audit_log
   -> 0004_organizational_context (contexto, ver su documentación)
+  -> 0005_email_ingestion (emails, ver su documentación)
 ```
 
 En la base descartable se prueba head → 0001 → head y también head → base → head,

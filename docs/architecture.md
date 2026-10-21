@@ -5,9 +5,9 @@
 BEC Guard es un proyecto académico de Ingeniería de Software para detectar y gestionar
 Business Email Compromise (BEC) / fraude ejecutivo. Se construye incrementalmente.
 
-**Fases 0, 1, 2A, 2B y 3:** scaffold, persistencia con Alembic, autenticación
-JWT/Argon2id, contexto organizacional con RBAC y auditoría atómica. Se conserva la pantalla de salud y la
-infraestructura local. No hay frontend de autenticación, análisis BEC ni IA.
+**Fases 0, 1, 2A, 2B, 3 y 4:** scaffold, persistencia con Alembic, autenticación
+JWT/Argon2id, contexto, ingestión de emails, parser MIME y auditoría atómica.
+Se conserva la pantalla de salud y la infraestructura local. No hay frontend de autenticación, análisis BEC ni IA.
 
 ## Arquitectura
 
@@ -31,7 +31,7 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 | --- | --- |
 | Frontend | Presentación y comunicación REST. Hoy muestra disponibilidad del backend; posteriormente permitirá revisión humana. |
 | FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Gestiona autenticación, contexto organizacional y auditoría; conserva la salud de infraestructura. |
-| PostgreSQL | User, AuditLog, ExecutiveContact y Vendor en public; datos internos de n8n en su propio esquema. Las demás entidades son futuras. |
+| PostgreSQL | User, AuditLog, ExecutiveContact, Vendor y Email en public; datos internos de n8n en su propio esquema. Las demás entidades son futuras. |
 | n8n | Orquestar recepción y llamadas a FastAPI en el futuro. Hoy solo se provisiona su instancia vacía. |
 | LangChain (futuro) | Facilitar análisis semántico dentro del backend, detrás de una interfaz propia. No determina el contrato del dominio. |
 | Adaptadores LLM (futuros) | Traducir solicitudes y respuestas de OpenAI, Gemini, Groq u otros al contrato neutral de BEC Guard. |
@@ -40,9 +40,9 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 
 - `api/`: rutas HTTP.
 - `core/`: configuración y conexión a la base de datos.
-- `schemas/`: contratos Pydantic de salud, auth y contexto organizacional.
-- `models/`: Base común, User, Role, AuditLog, ExecutiveContact y Vendor.
-- `services/`: autenticación, bootstrap, auditoría y servicios/lookups de contexto.
+- `schemas/`: contratos Pydantic de salud, auth, contexto e ingestión; evaluación separada.
+- `models/`: Base común, User, Role, AuditLog, ExecutiveContact, Vendor y Email.
+- `services/`: auth, auditoría, contexto, ingestión, parser MIME y loader de evaluación.
 - `scripts/`: comando interactivo del primer ADMIN.
 - `migrations/` y `alembic.ini`: historial y configuración de Alembic.
 
@@ -88,6 +88,11 @@ calificando public y excluyendo n8n. Ver [autenticación](authentication.md).
 Fase 3 añade ExecutiveContact y Vendor con GET/POST/PATCH autenticados, permisos
 de escritura ADMIN/MANAGER y lookups exactos activos. Recurso y auditoría comparten
 un commit. Ver [contexto organizacional](organizational-context.md).
+
+Fase 4 añade Email y contrato normalizado POST/GET, con resumen separado del detalle.
+El parser stdlib es interno: no hay conector, workflow ni análisis. El corpus de
+evaluación mantiene labels fuera de emails; [ingestión](email-ingestion.md) y
+[dataset](dataset.md).
 
 Los volúmenes `postgres_data` y `n8n_data` persisten los datos y la configuración de
 n8n. Sus claves de cifrado se generan y conservan en su volumen. No se exportan al

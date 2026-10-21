@@ -1,8 +1,9 @@
 # Dominio mínimo
 
-Estas definiciones parten de Fase 0. User, Role, AuditLog, ExecutiveContact y Vendor
-tienen persistencia. Hay autenticación, RBAC y gestión backend del contexto
-organizacional; Email, EmailAnalysis y BECAlert siguen siendo futuros, sin reglas BEC.
+Estas definiciones parten de Fase 0. User, Role, AuditLog, ExecutiveContact, Vendor
+y Email tienen persistencia. Hay autenticación, RBAC y gestión backend del contexto
+organizacional e ingestión de emails. EmailAnalysis y BECAlert siguen siendo futuros,
+sin reglas BEC.
 Los identificadores son UUID y las fechas se intercambiarán como ISO 8601 con zona horaria, normalizadas a UTC.
 
 ## Conceptos
@@ -13,10 +14,10 @@ Los identificadores son UUID y las fechas se intercambiarán como ISO 8601 con z
 | Role | Enum Python persistido como texto con CHECK. Cada usuario tiene un único rol; require_roles aplica RBAC sobre su rol actual. |
 | ExecutiveContact | Ejecutivo conocido persistente: UUID, name, position, department nullable, un email legítimo normalizado, is_active y timestamps. Su dominio se podrá derivar del email. |
 | Vendor | Proveedor conocido persistente: UUID, name, un domain principal canónico, contact_email y bank_account_reference opcionales, is_active y timestamps. Referencia bancaria opaca, nunca auditada. |
-| Email | Correo normalizado para análisis: identificador, remitente, destinatarios, asunto, texto y fecha de recepción. Su parser y mecanismo de ingestión son futuros. |
+| Email | Correo persistente normalizado: UUID, Message-ID único, thread_id opcional, remitente, Reply-To, Return-Path, destinatarios JSONB, asunto, body_text, Authentication-Results, received_at e ingested_at. Sin análisis ni labels de evaluación. |
 | EmailAnalysis | Ejecución de análisis de un Email: identificador, referencia al correo, fecha, versión del analizador y resultado neutral `BECAnalysisResult`. Un correo podrá tener varios análisis. |
 | BECAlert | Caso para revisión humana asociado a un análisis: identificador, estado operativo `status` (AlertStatus), veredicto humano `verdict` (AlertVerdict o `null`), responsable opcional y fechas. Su creación dependerá de una política futura, no de todo análisis automáticamente. |
-| AuditLog | Registro persistente append-only con UUID, actor nullable, snapshot de rol, acción, recurso nullable, IP nullable, details JSONB mínimos y fecha. Un trigger impide UPDATE/DELETE. Audita auth y cambios de contexto sin valores de campos. Nunca copia passwords, hashes, JWT, referencias bancarias ni cuerpos de correo. |
+| AuditLog | Registro persistente append-only con UUID, actor nullable, snapshot de rol, acción, recurso nullable, IP nullable, details JSONB mínimos y fecha. Un trigger impide UPDATE/DELETE. Audita auth, cambios de contexto e ingestión sin contenido del email. Nunca copia passwords, hashes, JWT, referencias bancarias ni cuerpos de correo. |
 
 Relaciones principales: User tiene exactamente un Role; Email tiene EmailAnalysis; BECAlert
 referencia EmailAnalysis y opcionalmente User como responsable; AuditLog permite
@@ -50,6 +51,20 @@ inactiva. Todos los roles leen; ADMIN y MANAGER crean/modifican. Los cambios y s
 AuditLog se confirman atómicamente. Los lookups internos devuelven coincidencias
 activas exactas por defecto, sin análisis BEC. Detalles, límites y contratos en
 [contexto organizacional](organizational-context.md).
+
+## Email persistente (Fase 4)
+
+`public.emails` conserva evidencia normalizada sin raw MIME ni attachments.
+Message-ID es obligatorio y único exacto, sin lowercase; emails/destinatarios se
+validan y normalizan con trim/lowercase. received_at requiere zona horaria y se
+normaliza a UTC; ingested_at lo genera PostgreSQL. UUID v4 desde aplicación.
+No hay edición o eliminación por API. ADMIN/MANAGER/ANALYST ingieren, todos leen.
+La inserción comparte commit con EMAIL_INGESTED, cuya auditoría no contiene datos
+del mensaje. Parser, límites y contratos en [ingestión](email-ingestion.md).
+
+El [dataset](dataset.md) separa label, split y expected_bec_type de la entrada
+normalizada: son anotaciones de evaluación, no columnas ni resultados del detector.
+No se implementan EmailAnalysis, motor BEC, scoring o alertas.
 
 ## Enumeraciones previstas
 

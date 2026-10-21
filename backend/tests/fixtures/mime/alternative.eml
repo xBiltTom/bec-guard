@@ -1,0 +1,23 @@
+Message-ID: <alternative@fixtures.becguard.example>
+From:   Nora Prisma <NORA@LUMINARIA.EXAMPLE>
+To: finanzas@luminaria.example
+Subject: =?utf-8?q?Revisi=C3=B3n_sint=C3=A9tica?=
+Date: Tue, 20 Oct 2026 09:30:00 -0500
+MIME-Version: 1.0
+Content-Type: multipart/alternative;
+ boundary="===============3451006779870584248=="
+
+--===============3451006779870584248==
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+
+Versión de texto preferida.
+
+--===============3451006779870584248==
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: 8bit
+MIME-Version: 1.0
+
+<p>Versión HTML alternativa.</p>
+
+--===============3451006779870584248==--

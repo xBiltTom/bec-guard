@@ -1,9 +1,11 @@
 # Persistencia de BEC Guard
 
-El dominio persistente actual contiene `User`, `AuditLog`, `ExecutiveContact` y
-`Vendor`. Hay autenticación backend y RBAC, sin CRUD de usuarios. Los contratos de auth
+El dominio persistente actual contiene `User`, `AuditLog`, `ExecutiveContact`,
+`Vendor` y `Email`. Hay autenticación backend y RBAC, sin CRUD de usuarios.
+Los contratos de auth
 y el bootstrap se describen en [autenticación](authentication.md). Modelos, índices
 y transacciones de Fase 3 en [contexto organizacional](organizational-context.md).
+Email, JSONB de destinatarios e idempotencia de Fase 4 en [ingestión](email-ingestion.md).
 
 ## Modelo y decisiones
 
@@ -72,6 +74,7 @@ caracteres especiales. No se imprimen credenciales ni parámetros SQL.
 La revisión histórica `0001_create_users` permanece intacta. 0002 normaliza
 identidades y reemplaza la unicidad de email. 0003 crea audit_log y su función/trigger
 append-only. 0004 añade executive_contacts y vendors con unicidad case-insensitive.
+0005 crea emails con UNIQUE exacto de Message-ID e índice de orden cronológico.
 Alembic administra además `public.alembic_version`. No hay tipos enum
 SQL independientes. Al llegar a base se eliminan todas las tablas del dominio, y la tabla
 de versiones queda vacía. Al bajar solo a 0001 se conservan users pero se pierde
@@ -165,12 +168,13 @@ en public o una revisión aplicada. Se permite solo `alembic_version` vacía par
 repetir la suite. Un nombre de test no sustituye estas comprobaciones.
 
 Las fixtures aplican las migraciones, permiten commits reales y limpian con
-TRUNCATE audit_log + users + executive_contacts + vendors únicamente en esta BD
+TRUNCATE audit_log + users + executive_contacts + vendors + emails únicamente en esta BD
 descartable, sin quitar el trigger.
-Al terminar revierten a base. Los tests verifican head → 0003 → head,
+Al terminar revierten a base. Los tests verifican head → 0004 → head, head → 0003 → head,
 head → 0001 → head, el ciclo hasta base, metadata match y fallo seguro ante colisiones. También comprueban User,
 bootstrap, login/me, JWT, cambios de rol/actividad, RBAC, eventos y triggers;
-además CRUD, lookups, unicidad y atomicidad de contexto organizacional.
+además CRUD/lookups de contexto, emails, unicidad y atomicidad de ingestión.
+Parser MIME y dataset tienen pruebas unitarias sin red ni PostgreSQL.
 Ejecuta la suite secuencialmente; no está diseñada para compartir la misma base
 entre ejecuciones concurrentes.
 

@@ -13,6 +13,7 @@ class AuditAction(StrEnum):
     LOGIN_FAILED = "LOGIN_FAILED"
     LOGIN_INACTIVE = "LOGIN_INACTIVE"
     RBAC_DENIED = "RBAC_DENIED"
+    EMAIL_INGESTED = "EMAIL_INGESTED"
     EXECUTIVE_CREATED = "EXECUTIVE_CREATED"
     EXECUTIVE_UPDATED = "EXECUTIVE_UPDATED"
     EXECUTIVE_DEACTIVATED = "EXECUTIVE_DEACTIVATED"
@@ -99,6 +100,26 @@ def record_context_event(
         resource_id=resource_id,
         ip_address=address,
         details={"changed_fields": ",".join(sorted(changed_fields))} if changed_fields else None,
+    )
+    session.add(event)
+    return event
+
+
+def record_email_ingested(
+    session: Session, *, actor: User, email_id: UUID, peer: str | None = None
+) -> AuditLog:
+    try:
+        address = str(parse_ip(peer)) if peer else None
+    except ValueError:
+        address = None
+    event = AuditLog(
+        actor_user_id=actor.id,
+        actor_role=actor.role,
+        action=AuditAction.EMAIL_INGESTED.value,
+        resource_type="email",
+        resource_id=email_id,
+        ip_address=address,
+        details=None,
     )
     session.add(event)
     return event
