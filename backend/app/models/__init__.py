@@ -3,9 +3,19 @@
 from app.models.audit_log import AuditLog
 from app.models.base import Base
 from app.models.email import Email
+from app.models.email_analysis import EmailAnalysis
 from app.models.enums import Role
 from app.models.executive_contact import ExecutiveContact
 from app.models.user import User
 from app.models.vendor import Vendor
 
-__all__ = ["AuditLog", "Base", "Email", "ExecutiveContact", "Role", "User", "Vendor"]
+__all__ = [
+    "AuditLog",
+    "Base",
+    "Email",
+    "EmailAnalysis",
+    "ExecutiveContact",
+    "Role",
+    "User",
+    "Vendor",
+]

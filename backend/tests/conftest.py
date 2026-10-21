@@ -89,7 +89,8 @@ def db_session(migrated_engine) -> Iterator[Session]:
                 connection.execute(
                     text(
                         "TRUNCATE public.audit_log, public.users, "
-                        "public.executive_contacts, public.vendors, public.emails"
+                        "public.executive_contacts, public.vendors, public.emails, "
+                        "public.email_analysis"
                     )
                 )
 

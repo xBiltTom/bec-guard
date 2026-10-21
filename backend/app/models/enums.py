@@ -21,3 +21,8 @@ class RiskLevel(StrEnum):
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
     CRITICAL = "CRITICAL"
+
+
+class AnalysisStatus(StrEnum):
+    COMPLETED = "COMPLETED"
+    ERROR = "ERROR"

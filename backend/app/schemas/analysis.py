@@ -1,8 +1,9 @@
 from typing import Annotated, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 
-from app.models.enums import BECType
+from app.models.enums import AnalysisStatus, BECType, RiskLevel
 
 Score = Annotated[int, Field(strict=True, ge=0, le=100)]
 Description = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=240)]
@@ -42,3 +43,24 @@ class SemanticAssessment(BaseModel):
     signals: list[SemanticSignal] = Field(max_length=8)
     summary: str = Field(min_length=1, max_length=600)
     recommended_action: str = Field(min_length=1, max_length=400)
+
+
+class EmailAnalysisResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    email_id: UUID
+    status: AnalysisStatus
+    deterministic_score: Score
+    semantic_score: Score | None
+    risk_score: Score | None
+    risk_level: RiskLevel | None
+    bec_type: BECType | None
+    signals: list[Signal]
+    summary: str | None
+    recommended_action: str | None
+    provider: str | None
+    model: str | None
+    policy_version: str
+    error_code: str | None
+    analyzed_at: AwareDatetime

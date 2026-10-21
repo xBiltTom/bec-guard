@@ -14,6 +14,8 @@ class AuditAction(StrEnum):
     LOGIN_INACTIVE = "LOGIN_INACTIVE"
     RBAC_DENIED = "RBAC_DENIED"
     EMAIL_INGESTED = "EMAIL_INGESTED"
+    EMAIL_ANALYZED = "EMAIL_ANALYZED"
+    EMAIL_ANALYSIS_FAILED = "EMAIL_ANALYSIS_FAILED"
     EXECUTIVE_CREATED = "EXECUTIVE_CREATED"
     EXECUTIVE_UPDATED = "EXECUTIVE_UPDATED"
     EXECUTIVE_DEACTIVATED = "EXECUTIVE_DEACTIVATED"
@@ -118,6 +120,33 @@ def record_email_ingested(
         action=AuditAction.EMAIL_INGESTED.value,
         resource_type="email",
         resource_id=email_id,
+        ip_address=address,
+        details=None,
+    )
+    session.add(event)
+    return event
+
+
+def record_analysis_event(
+    session: Session,
+    action: AuditAction,
+    *,
+    actor: User,
+    analysis_id: UUID,
+    peer: str | None = None,
+) -> AuditLog:
+    if action not in {AuditAction.EMAIL_ANALYZED, AuditAction.EMAIL_ANALYSIS_FAILED}:
+        raise ValueError("Invalid analysis audit action")
+    try:
+        address = str(parse_ip(peer)) if peer else None
+    except ValueError:
+        address = None
+    event = AuditLog(
+        actor_user_id=actor.id,
+        actor_role=actor.role,
+        action=action.value,
+        resource_type="email_analysis",
+        resource_id=analysis_id,
         ip_address=address,
         details=None,
     )
