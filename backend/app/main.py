@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.alerts import router as alerts_router
 from app.api.auth import router as auth_router
 from app.api.email_analysis import router as analysis_router
 from app.api.emails import router as emails_router
@@ -45,6 +46,7 @@ def create_app(
     application.include_router(context_router)
     application.include_router(emails_router)
     application.include_router(analysis_router)
+    application.include_router(alerts_router)
     return application
 
 

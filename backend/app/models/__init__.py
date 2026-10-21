@@ -2,6 +2,7 @@
 
 from app.models.audit_log import AuditLog
 from app.models.base import Base
+from app.models.bec_alert import BECAlert
 from app.models.email import Email
 from app.models.email_analysis import EmailAnalysis
 from app.models.enums import Role
@@ -12,6 +13,7 @@ from app.models.vendor import Vendor
 __all__ = [
     "AuditLog",
     "Base",
+    "BECAlert",
     "Email",
     "EmailAnalysis",
     "ExecutiveContact",

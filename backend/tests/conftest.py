@@ -11,11 +11,13 @@ from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
-from app.core.config import AuthSettings, Settings
+from app.core.config import AuthSettings, LLMSettings, Settings
 from app.core.database import create_session_factory, get_session
 from app.core.passwords import hash_password
 from app.main import create_app
 from app.models import Role, User
+from app.schemas.analysis import SemanticAssessment
+from app.services.semantic_analysis import SemanticAnalysisError
 
 
 @pytest.fixture(scope="session")
@@ -90,7 +92,7 @@ def db_session(migrated_engine) -> Iterator[Session]:
                     text(
                         "TRUNCATE public.audit_log, public.users, "
                         "public.executive_contacts, public.vendors, public.emails, "
-                        "public.email_analysis"
+                        "public.email_analysis, public.bec_alerts"
                     )
                 )
 
@@ -159,3 +161,31 @@ def email_payload():
         "authentication_results": "mx.luminaria.example; spf=pass",
         "received_at": "2026-10-20T09:30:00-05:00",
     }
+
+
+@pytest.fixture
+def analysis_stub():
+    class Analyzer:
+        settings = LLMSettings(_env_file=None, llm_provider="openai", llm_model="unit-test-model")
+        score = 90
+        calls = 0
+        failure = None
+        entered = None
+        release = None
+
+        def assess(self, email, deterministic, context):
+            self.calls += 1
+            if self.entered:
+                self.entered.set()
+                assert self.release.wait(10)
+            if self.failure:
+                raise SemanticAnalysisError(self.failure)
+            return SemanticAssessment(
+                risk_score=self.score,
+                bec_type="OTHER",
+                signals=[],
+                summary="Resultado controlado de pruebas.",
+                recommended_action="Verificar identidad.",
+            )
+
+    return Analyzer()

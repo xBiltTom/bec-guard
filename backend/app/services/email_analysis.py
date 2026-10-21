@@ -12,6 +12,7 @@ from app.core.config import LLMSettings
 from app.models import Email, EmailAnalysis, User
 from app.models.enums import AnalysisStatus
 from app.schemas.analysis import Signal
+from app.services.alerts import ensure_alert_for_analysis
 from app.services.audit import AuditAction, record_analysis_event
 from app.services.deterministic_analysis import (
     DETERMINISTIC_POLICY_VERSION,
@@ -54,6 +55,7 @@ def analyze_email(
             raise HTTPException(404, "Email not found")
         analysis = session.scalar(select(EmailAnalysis).where(EmailAnalysis.email_id == email_id))
         if analysis is not None and analysis.status == AnalysisStatus.COMPLETED:
+            ensure_alert_for_analysis(session, analysis, actor=actor, peer=peer)
             session.commit()  # Release the parent lock, without another audit/call.
             return analysis
         context = load_analysis_context(session)
@@ -102,6 +104,7 @@ def analyze_email(
             analysis_id=analysis.id,
             peer=peer,
         )
+        ensure_alert_for_analysis(session, analysis, actor=actor, peer=peer)
         session.commit()
         return analysis
     except SQLAlchemyError:

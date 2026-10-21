@@ -16,6 +16,7 @@ class AuditAction(StrEnum):
     EMAIL_INGESTED = "EMAIL_INGESTED"
     EMAIL_ANALYZED = "EMAIL_ANALYZED"
     EMAIL_ANALYSIS_FAILED = "EMAIL_ANALYSIS_FAILED"
+    BEC_ALERT_CREATED = "BEC_ALERT_CREATED"
     EXECUTIVE_CREATED = "EXECUTIVE_CREATED"
     EXECUTIVE_UPDATED = "EXECUTIVE_UPDATED"
     EXECUTIVE_DEACTIVATED = "EXECUTIVE_DEACTIVATED"
@@ -147,6 +148,26 @@ def record_analysis_event(
         action=action.value,
         resource_type="email_analysis",
         resource_id=analysis_id,
+        ip_address=address,
+        details=None,
+    )
+    session.add(event)
+    return event
+
+
+def record_alert_created(
+    session: Session, *, actor: User, alert_id: UUID, peer: str | None = None
+) -> AuditLog:
+    try:
+        address = str(parse_ip(peer)) if peer else None
+    except ValueError:
+        address = None
+    event = AuditLog(
+        actor_user_id=actor.id,
+        actor_role=actor.role,
+        action=AuditAction.BEC_ALERT_CREATED.value,
+        resource_type="bec_alert",
+        resource_id=alert_id,
         ip_address=address,
         details=None,
     )

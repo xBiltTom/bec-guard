@@ -159,6 +159,7 @@ def test_error_is_not_low_and_retry_updates_same_row(
         "EMAIL_INGESTED",
         "EMAIL_ANALYSIS_FAILED",
         "EMAIL_ANALYZED",
+        "BEC_ALERT_CREATED",
     }
 
 

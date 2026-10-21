@@ -26,3 +26,14 @@ class RiskLevel(StrEnum):
 class AnalysisStatus(StrEnum):
     COMPLETED = "COMPLETED"
     ERROR = "ERROR"
+
+
+class AlertStatus(StrEnum):
+    OPEN = "OPEN"
+    UNDER_REVIEW = "UNDER_REVIEW"
+    CLOSED = "CLOSED"
+
+
+class AlertVerdict(StrEnum):
+    CONFIRMED_BEC = "CONFIRMED_BEC"
+    FALSE_POSITIVE = "FALSE_POSITIVE"

@@ -19,12 +19,18 @@ def test_upgrade_downgrade_upgrade_and_metadata_match(migrated_engine, migration
         "vendors",
         "emails",
         "email_analysis",
+        "bec_alerts",
         "alembic_version",
     }
     with migrated_engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM public.alembic_version")) == (
-            "0006_email_analysis"
+            "0007_bec_alerts"
         )
+
+    migration_runner(command.downgrade, "0006_email_analysis")
+    assert "bec_alerts" not in tables() and "email_analysis" in tables()
+    migration_runner(command.upgrade, "head")
+    migration_runner(command.check)
 
     migration_runner(command.downgrade, "0005_email_ingestion")
     assert "email_analysis" not in tables() and "emails" in tables()
@@ -60,6 +66,7 @@ def test_upgrade_downgrade_upgrade_and_metadata_match(migrated_engine, migration
         "vendors",
         "emails",
         "email_analysis",
+        "bec_alerts",
         "alembic_version",
     }
     inspector = inspect(migrated_engine)
