@@ -36,3 +36,15 @@ class AuthSettings(BaseSettings):
     jwt_secret_key: SecretStr = Field(min_length=32)
     jwt_access_token_minutes: int = Field(default=30, ge=1, le=1440)
     jwt_algorithm: Literal["HS256"] = "HS256"
+
+
+class LLMSettings(BaseSettings):
+    # Loaded only when analysis is attempted, independently of DB/JWT settings.
+    model_config = SettingsConfigDict(env_file=ROOT_ENV, extra="ignore", hide_input_in_errors=True)
+
+    llm_provider: str = ""
+    llm_model: str = Field(default="", max_length=200)
+    llm_timeout_seconds: float = Field(default=30, ge=1, le=120)
+    openai_api_key: SecretStr = SecretStr("")
+    google_api_key: SecretStr = SecretStr("")
+    groq_api_key: SecretStr = SecretStr("")
