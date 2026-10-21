@@ -5,11 +5,12 @@
 BEC Guard es un proyecto académico de Ingeniería de Software para detectar y gestionar
 Business Email Compromise (BEC) / fraude ejecutivo. Se construye incrementalmente.
 
-**Fases 0–7:** scaffold, persistencia con Alembic, autenticación
+**Fases 0–8:** scaffold, persistencia con Alembic, autenticación
 JWT/Argon2id, contexto, ingestión de emails, parser MIME y auditoría atómica.
 Fase 5 añade reglas, LangChain multiproveedor, scoring y EmailAnalysis persistido.
 Fase 6 añade alertas automáticas y Webhook n8n. Fase 7 incorpora aplicación React
-autenticada, dashboard, cola, HITL, correos, contexto y auditoría.
+autenticada, dashboard, cola, HITL, correos, contexto y auditoría. Fase 8 agrega
+evaluación académica local del holdout congelado y reportes operativos PDF/XLSX.
 
 ## Arquitectura
 
@@ -32,12 +33,27 @@ escuchan en `127.0.0.1`. Es una configuración de desarrollo local.
 
 | Componente | Responsabilidad |
 | --- | --- |
-| Frontend | Presentación y comunicación REST. Login/sessionStorage, dashboard, evidencia, revisión humana y operaciones por rol. |
-| FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Gestiona autenticación, contexto organizacional y auditoría; conserva la salud de infraestructura. |
+| Frontend | Presentación y comunicación REST. Login/sessionStorage, dashboard, evidencia, revisión humana, operaciones por rol y descarga de reportes. |
+| FastAPI | Validación de contratos, lógica del dominio y acceso a persistencia. Gestiona autenticación, contexto organizacional, auditoría y reportes PDF/XLSX; conserva la salud de infraestructura. |
 | PostgreSQL | User, AuditLog, ExecutiveContact, Vendor, Email, EmailAnalysis y BECAlert en public; datos internos de n8n en su propio esquema. |
 | n8n | Webhook autenticado → ingestión/análisis mediante API key acotada → ALERT/NO_ALERT/ERROR. Sin reglas BEC ni scoring propios. |
 | LangChain | Un chat model, prompt y structured output validado dentro del backend, sin agentes/tools. |
 | Adaptadores LLM | OpenAI, Gemini o Groq; solo se instancia el proveedor configurado al analizar. |
+
+## Evaluación académica y reportes operativos
+
+`app.evaluation` y `app.scripts.evaluate_holdout` forman tooling local reproducible;
+no son rutas HTTP, no escriben PostgreSQL y sus labels nunca llegan al detector.
+Holdout se ejecutó una vez después del freeze del detector; no se ajustó el motor
+con los resultados. El CLI híbrido requiere consentimiento explícito antes de
+inicializar un proveedor. La evaluación híbrida de calidad permanece NOT_RUN.
+
+Los reportes usan exclusivamente consultas SQL sobre las entidades operativas.
+`reporting.py` arma un resumen y una lista mínima de alertas, y `report_formats.py`
+produce bytes PDF/XLSX en memoria. Los reportes no importan el dataset ni contienen
+ground truth, cuerpo, datos bancarios, prompts o salida cruda del proveedor. La UI
+descarga el archivo con el Bearer de sesión. Ver [evaluación](evaluation.md) y
+[reportes](reporting.md).
 
 ## Organización del backend
 
@@ -114,7 +130,7 @@ sin habilitar `$env` en nodos. No se conserva historial de ejecuciones con corre
 los registros temporales se marcan y eliminan mediante pruning periódico.
 [Diseño y contratos](alerts-and-orchestration.md) · [operación n8n](../n8n/README.md).
 
-## Flujo futuro (solo diseño)
+## Flujo de correo real (futuro)
 
 ```mermaid
 flowchart TD
@@ -134,12 +150,11 @@ flowchart TD
     DB --> Review[Revisión humana mediante React y FastAPI]
 ```
 
-FastAPI será responsable de combinar señales y validar el resultado; un proveedor
-LLM no decidirá por sí solo acciones financieras ni sustituirá la revisión humana.
-El scoring hybrid-v1 y la política automática alert-v1 ya existen; recepción real
-de correo y notificaciones siguen pendientes. Revisión humana ya existe en Fase 7.
-Cambiar de proveedor no deberá modificar consumidores REST ni entidades de negocio.
-Fase 5 incorpora prompts/SDKs con consumidores reales; no se implementan agentes.
+FastAPI combina señales y valida el resultado; un proveedor LLM no decide por sí
+solo acciones financieras ni sustituye la revisión humana. El scoring hybrid-v1,
+alert-v1 y HITL existen. Recepción real de correo y notificaciones siguen pendientes.
+Cambiar de proveedor no modifica consumidores REST ni entidades de negocio. No hay
+agentes ni evaluación de holdout en el producto.
 
 ## Referencias técnicas
 
@@ -156,4 +171,5 @@ GET /api/dashboard/summary agrega SQL, GET /api/audit limita ADMIN/AUDITOR. Filt
 alertas siguen siendo columnas SQL. Claim/release/resolve bloquean la fila de alerta
 y confirman mutación más AuditLog en un commit. 0008 refuerza invariantes por estado;
 no se cambian migraciones históricas, motor BEC, n8n ni políticas de scoring.
-Ver [frontend](frontend.md) y [dominio](domain.md).
+La ruta `/reports` entrega PDF/XLSX a ADMIN/MANAGER/AUDITOR con descarga autenticada.
+Ver [frontend](frontend.md), [dominio](domain.md) y [reportes](reporting.md).

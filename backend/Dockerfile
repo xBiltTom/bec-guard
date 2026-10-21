@@ -2,6 +2,7 @@ FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    XDG_CACHE_HOME=/tmp \
     PATH="/app/.venv/bin:$PATH"
 
 RUN apt-get update \

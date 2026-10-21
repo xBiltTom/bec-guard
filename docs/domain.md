@@ -94,6 +94,18 @@ sin backfill masivo. No hay PATCH/DELETE; claim/release/resolve añaden revisió
 Automatización usa actor/rol null en eventos de email/análisis/alerta; humanos
 conservan su User/rol. [Contratos y orquestación](alerts-and-orchestration.md).
 
+## Evaluación académica y reportes operativos (Fase 8)
+
+La evaluación formal usa contratos Pydantic locales fuera de SQLAlchemy. `split`
+solo selecciona los casos. `label`, `expected_bec_type` e `is_hard_negative` se
+consultan después de obtener cada predicción; ninguno es un dato de producción. No hay
+tabla, endpoint ni persistencia de corridas. El holdout se midió una vez con el
+detector congelado, sin tuning posterior ([metodología](evaluation.md)).
+
+`OperationalReport` es una estructura temporal formada desde PostgreSQL. PDF y
+XLSX se generan en memoria para cada solicitud; no crean otra entidad, historial,
+ni copia del cuerpo del correo. [Campos y privacidad](reporting.md).
+
 ## Enumeraciones previstas
 
 ### RiskLevel

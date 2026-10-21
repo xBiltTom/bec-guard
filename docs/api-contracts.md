@@ -208,3 +208,22 @@ Orden created_at DESC/id ASC. Array con id, actor_user_id/name/role nullable, ac
 resource_type/id nullable, ip_address, created_at y details nullable, todos campos
 persistidos existentes; sin añadir contenido sensible. El actor_name es el nombre
 actual de User, role es snapshot del evento. No hay mutaciones ni bypass del trigger.
+
+## GET /api/reports/operational.pdf y .xlsx
+
+Solo JWT de ADMIN, MANAGER o AUDITOR; ANALYST recibe 403. Query opcional
+`from_date` y `to_date` usa `YYYY-MM-DD` e interpreta los límites como días UTC
+inclusivos. `from_date > to_date` responde 400. Sin fechas, usa todos los datos.
+Correos se filtran por `ingested_at`, análisis por `analyzed_at` y alertas por
+`created_at`; los estados y veredictos representan el valor actual, no una
+reconstrucción histórica del estado durante el periodo.
+
+PDF responde `application/pdf`; Excel responde
+`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`. Ambos usan
+`Content-Disposition: attachment` con nombre estable
+`bec-guard-operational-YYYYMMDD.pdf|xlsx` y `Cache-Control: no-store`. El reporte
+contiene agregados y filas de alerta limitadas a ID, fecha, score/riesgo, tipo,
+estado, veredicto y responsable. Nunca incluye cuerpo, subject, dirección, headers,
+referencia bancaria, prompts, salida del LLM, AuditLog ni labels del dataset.
+Se renderiza en memoria; no se guarda en el servidor. Los reportes son datos
+operativos PostgreSQL y no ejecutan ni consultan el evaluador académico.

@@ -427,3 +427,58 @@ tokens LLM. Se conserva la deprecación upstream google-genai ya documentada.
 No se añadieron reportes, evaluación holdout/métricas finales, proveedor de correo,
 notificaciones, refresh, CRUD de usuarios ni funciones fuera de Fase 7.
 Guía de producto, sesión y límites: [frontend](frontend.md).
+
+## Fase 8: evaluación congelada y reportes operativos
+
+Inicio en main, HEAD `14217eeb9bf60f95dce9ec18e127299a6196a8af`; cinco commits
+previos de Fase 7 revisados. **CI #8 SUCCESS**, confirmado por el usuario para ese
+commit. El único archivo preexistente sin seguimiento era `skills-lock.json` y se
+conservó fuera de los commits. No se hizo push ni se ejecutó CI remoto de Fase 8.
+
+8A añadió el evaluador local y 19 pruebas con fixtures artificiales. Antes del
+holdout pasaron las 451 pruebas backend entonces existentes, Ruff, validación
+estructural y development. 8B congeló el detector en
+`71f5697312072c106730dbc5d594f5ab11816bb5` y ejecutó **una sola evaluación
+determinista** sobre 42 holdout. SHA del corpus, contexto, siete archivos del
+detector, versiones y thresholds quedaron registrados antes de obtener
+predicciones. [Metodología, hashes y métricas agregadas](evaluation.md).
+
+8C añadió reportes productivos, 19 pruebas backend y 12 frontend; 8D completó
+validación, privacidad, documentación y runtime Docker. No cambió reglas, pesos,
+similitud, prompt, contrato semántico, scoring, thresholds, clasificación ni corpus.
+La comparación final de hashes con el freeze sigue coincidiendo.
+
+| Validación final | Resultado |
+| --- | --- |
+| Dependencias backend | `uv sync --frozen` aprobado. openpyxl 3.1.5 y WeasyPrint 70.0 compatibles con Python 3.14.8; lockfile conservó las dependencias anteriores. Sin pandas, numpy o scikit-learn. |
+| Backend PostgreSQL 18 | **470 pruebas aprobadas**, sin omisiones; **38 nuevas** frente a Fase 7. Semántica y runner híbrido usan fakes exclusivamente para probar software, sin red. |
+| Evaluador | 19 tests: métricas/zero division, thresholds 40/70, hard negatives, tipos, latencia, serialización, frontera de metadata, consentimiento externo, ERROR/coverage y ausencia de contenido en artefactos. No se usa holdout real para métricas en tests ni CI. |
+| Holdout determinista | 42 COMPLETED, cero ERROR, coverage 100%. Threshold40: TP10/TN30/FP0/FN2; threshold70: TP0/TN30/FP0/FN12. El baseline determinista no detectó ataques al umbral operativo. Sin tuning posterior. |
+| Holdout híbrido | **NOT_RUN**: requiere autorización explícita para proveedor externo. Sin llamadas reales a OpenAI, Gemini o Groq ni métricas de calidad fabricadas con fakes. |
+| Artefactos | Una sola carpeta local ignorada en artifacts/evaluation con freeze, resumen, predicciones por ID y estado híbrido. No se versionan predicciones por caso ni se duplica contenido del correo. |
+| Reporting backend | 19 tests: ADMIN/MANAGER/AUDITOR, ANALYST403 y sin key/JWT401; fechas400/UTC/date.max, agregados, DB vacía, ERROR distinto de LOW, PDF válido, workbook, hojas/tipos, headers de descarga, privacidad, texto Excel sin fórmulas y HTML escapado con fetch externo bloqueado. |
+| Ruff | Check y format --check aprobados: **104 archivos**. |
+| Migraciones | Sin nueva revisión ni diff en 0001–0008. Head sigue 0008_alert_hitl_constraints. head → 0007 → head, head → base → head y Alembic check sin diferencias sobre BD descartable. |
+| Dataset/development | Validador estructural de 140 casos aprobado. Development98 mantiene legítimos70 0–26/media3.83, BEC28 15–90/media62.64 y 21 hard negatives LOW. Corpus/contexto y detector idénticos al freeze. No se repitió holdout para smoke. |
+| Frontend | `npm ci`, **50 pruebas** aprobadas (**12 nuevas**), lint, format:check y build verdes. Reportes según rol, descarga PDF/XLSX con Bearer, 401/403/5xx, rango inválido, bloqueo de carga, filename seguro y revocación de object URL. Sin nuevas dependencias frontend. |
+| Bundle | JS **301.10 KB / 92.98 KB gzip**, CSS **13.85 KB / 3.86 KB gzip**. Sin SDK, Axios, librería de charts o UI framework nuevos. |
+| Revisión visual/HTTP | Chromium temporal fuera del repo, login real y PostgreSQL descartable; /reports a **1440×900, 1024×768 y 375×800**, sin overflow del documento. Ambas descargas autenticadas correctas; fechas invertidas muestran feedback y bloquean botones. |
+| PDF/XLSX reales | PDF A4 de dos páginas con 12 alertas sintéticas, ambas páginas renderizadas e inspeccionadas. XLSX abierto con openpyxl: cuatro hojas, fechas/números tipados y agregados correctos. Contenido revisado sin cuerpos, headers, subject, remitentes, referencia bancaria ni resolución privada. |
+| Docker/Compose | `config --quiet` aprobado; backend/frontend reconstruidos; cuatro servicios healthy. PDF y XLSX generados también dentro de la imagen no root. XDG_CACHE_HOME=/tmp elimina avisos de caché Fontconfig; no almacena reportes. |
+| n8n | 2.44.4, readiness **200**, workflow canónico reimportado/publicado y servicio reiniciado. JSON, importador y Compose sin cambios de Fase 8. |
+| Estructura n8n | Huella normalizada de columnas/defaults/constraints/índices idéntica antes y después de importar. **160 tablas, 1270 columnas, 1429 constraints**, sin cambios estructurales. |
+| CI equivalente | Suites backend/frontend, Ruff, lint/formato/build, actionlint y Compose aprobados localmente. CI instala librerías PDF y sigue sin holdout formal, proveedor externo, API keys, n8n o browser. |
+| Seguridad/separación | No hay evaluator/ground truth en API, modelos SQL o frontend. Reportes leen solo PostgreSQL. Secretos locales reales ausentes de archivos versionables, bundle y PDF; privacidad de celdas/HTML/PDF verificada. .env no versionado. |
+
+Los reportes usan la fecha propia de cada entidad y muestran estados/veredictos
+actuales; no son una reconstrucción histórica. Se generan en memoria de forma
+síncrona, sin plataforma de exportaciones ni archivos persistentes. Los resultados
+académicos provienen de un corpus sintético pequeño y no permiten afirmar rendimiento
+real-world. La evaluación híbrida necesita un experimento real autorizado posterior.
+
+Se conservó la advertencia de deprecación upstream de google-genai ya conocida.
+Los servidores temporales se detuvieron; las bases de navegador y credenciales se
+eliminaron, la base de la suite quedó en Alembic base y PostgreSQL descartable se
+detuvo. Desarrollo no recibió usuarios, correos, alertas ni contexto de demostración
+en esta fase. No hubo gasto LLM. No se implementó Fase 9, conectores de correo real,
+notificaciones, ML o tuning post-holdout. [Reportes](reporting.md).

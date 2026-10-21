@@ -35,10 +35,15 @@ localStorage, cookies de sesión ficticias ni secretos en DOM/logs del cliente.
 | /executives | Consulta y mantenimiento de identidades legítimas. |
 | /vendors | Consulta y mantenimiento de dominios/contactos y referencia bancaria en formulario/detalle. |
 | /audit | Lectura ADMIN/AUDITOR, filtros action/resource_type y paginación. |
+| /reports | Descarga de reportes operativos PDF/XLSX para ADMIN, MANAGER y AUDITOR. |
 
 La sidebar se convierte en menú desplegable en móvil. Nombre/rol y logout quedan
-visibles en el header. No hay rutas Users o Reports. La tabla muestra 25 filas por
-página y habilita Siguiente cuando recibe una página completa; sin consulta de total
+visibles en el header. No hay ruta de usuarios. Reportes usa un fetch autenticado
+que envía Bearer desde sessionStorage, obtiene el blob y revoca su object URL;
+401 limpia la sesión y 403 conserva la sesión con feedback.
+
+Las tablas de consulta muestran 25 filas por página y habilitan Siguiente cuando
+reciben una página completa; sin consulta de total
 extra, la página posterior puede estar vacía. Todas las vistas incluyen loading,
 empty y error con feedback o reintento. Los 400 muestran validación genérica porque
 el backend no refleja valores del request; 409 informa conflicto y refresca alertas.

@@ -218,8 +218,10 @@ Regresión local determinista: 98 development, legítimos 70 (0–26, media 3.83
 BEC 28 (15–90, media 62.64), los 21 hard negatives legítimos LOW. Distribución:
 75 LOW, 12 MEDIUM, 7 HIGH, 4 CRITICAL. Es una comprobación de desarrollo, no
 evaluación formal ni evidencia de rendimiento del pipeline con LLM real.
-No se usó contenido ni labels holdout para diseñar, ajustar o evaluar el motor;
-solo pasaron las validaciones estructurales heredadas. Dataset sin modificaciones.
+El detector quedó congelado antes de la evaluación determinista formal del holdout.
+El corpus no se modificó y los resultados no se usaron para ajustar el detector.
+La medición y sus límites están en [evaluación](evaluation.md). El holdout no se
+vuelve una regresión de CI ni una fuente para tuning.
 
 Las reglas pueden omitir ataques sutiles; el peso 50/50 también puede dejar en
 MEDIUM ataques detectados solo por semántica. El corpus es sintético y los scores

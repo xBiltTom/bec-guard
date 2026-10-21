@@ -1,11 +1,11 @@
 # BEC Guard
 
 Proyecto académico de Ingeniería de Software para la detección y gestión de
-Business Email Compromise (BEC) / fraude ejecutivo. Su objetivo futuro es combinar
+Business Email Compromise (BEC) / fraude ejecutivo. El producto combina
 reglas deterministas, contexto de ejecutivos y proveedores, análisis semántico,
 evaluación de riesgo, revisión humana y auditoría.
 
-**Estado actual: Fases 0–7.** Hay persistencia de User, AuditLog,
+**Estado actual: Fases 0–8.** Hay persistencia de User, AuditLog,
 ExecutiveContact, Vendor, Email, EmailAnalysis y BECAlert; autenticación Argon2id/JWT,
 contexto organizacional, ingestión y análisis BEC híbrido con RBAC y auditoría
 atómica, parser MIME y dataset sintético.
@@ -13,6 +13,9 @@ La aplicación React permite login, dashboard, cola, evidencia, revisión humana
 correos, contexto y auditoría por rol.
 Se ingieren, consultan y analizan correos; HIGH/CRITICAL crean alertas OPEN.
 n8n orquesta el flujo mediante un webhook autenticado, sin proveedor de correo real.
+La evaluación académica del holdout quedó separada y congelada antes de una única
+ejecución determinista. Los reportes PDF/Excel consultan datos operativos de
+PostgreSQL y se descargan desde la aplicación con autorización por rol.
 
 La minifase de consolidación separa conceptualmente el estado operativo de la
 alerta (`status`) de su veredicto humano (`verdict`, inicialmente `null`) y confirma
@@ -49,6 +52,8 @@ Documentación:
 - [Motor BEC, reglas, LangChain, scoring y ERROR/retry](docs/bec-analysis.md)
 - [Alertas, API de automatización y orquestación](docs/alerts-and-orchestration.md)
 - [Frontend, sesión y revisión humana](docs/frontend.md)
+- [Evaluación formal y resultado congelado](docs/evaluation.md)
+- [Reportes operativos PDF/Excel](docs/reporting.md)
 - [Workflow n8n: importar, publicar y probar](n8n/README.md)
 - [Validaciones ejecutadas y particularidades del entorno](docs/validation.md)
 
@@ -149,10 +154,9 @@ Las dos primeras peticiones deben responder:
 {"status":"ok","service":"bec-guard-api"}
 ```
 
-Abre React: debe aparecer **Backend conectado ✓**. La consulta comprueba también
-PostgreSQL; ante error se muestra **Backend no disponible**, con un botón para
-reintentar. El navegador solicita `/health` al mismo origen y Vite reenvía la
-petición a FastAPI (`http://backend:8000` dentro de Compose). No necesita CORS.
+Abre React: debe aparecer el login o el dashboard si la sesión sigue vigente.
+El chequeo `/health` comprueba también PostgreSQL. Vite reenvía `/health` y `/api`
+al backend (`http://backend:8000` dentro de Compose); no necesita CORS.
 
 El frontend usa el servidor de desarrollo Vite dentro de Docker, sin bind mounts.
 Después de editar código, reconstruye con `docker compose up --build -d` o usa
@@ -171,7 +175,8 @@ uv run ruff format --check .
 
 La suite verifica salud, passwords, JWT, bootstrap, login/me, RBAC, persistencia,
 migraciones, contexto, emails, parser MIME, dataset, reglas, semántica con fakes,
-scoring, análisis/retry/concurrencia y auditoría append-only. Las pruebas de
+scoring, análisis/retry/concurrencia, auditoría append-only, métricas con fixtures
+y generación/privacidad PDF/XLSX. Las pruebas de
 integración usan PostgreSQL real y requieren `TEST_DATABASE_URL`, una variable independiente de
 `.env`, apuntando a una base de pruebas vacía. Sin ella se omiten las de integración.
 Consulta [cómo levantar esa base y ejecutar la suite completa](docs/persistence.md#pruebas-de-integración).
@@ -186,9 +191,8 @@ npm run format:check
 npm run build
 ```
 
-El build verifica TypeScript y genera `dist/`. No se añade un framework de pruebas
-del frontend en esta fase. Usa `npm run format` y `uv run ruff format .` para aplicar
-el formato de cada aplicación.
+El build verifica TypeScript y genera `dist/`. Usa `npm run format` y
+`uv run ruff format .` para aplicar el formato de cada aplicación.
 
 ### Integración continua
 
@@ -246,8 +250,9 @@ responde 409. No hay PATCH/DELETE ni endpoint de upload MIME. El parser interno
 convierte bytes RFC 5322/MIME al mismo contrato sin guardar raw MIME o attachments.
 
 El corpus sintético tiene 140 casos: 100 legítimos y 40 BEC, separados en development
-(98) y holdout (42), con 30 legítimos difíciles. Metadata de evaluación nunca entra
-a emails. Valídalo desde backend/, sin PostgreSQL:
+(98) y holdout (42), con 30 legítimos difíciles. El holdout se evaluó una sola vez
+con el detector congelado; sus resultados no se usaron para ajustes. Metadata de
+evaluación nunca entra a emails. Valídalo desde backend/, sin PostgreSQL:
 
 ```bash
 uv run python -m app.scripts.validate_dataset
@@ -296,8 +301,9 @@ uv run python -m app.scripts.check_development
 # Opcional, permite llamadas externas con coste: añadir --llm.
 ```
 
-Solo procesa development; holdout queda reservado. Reglas, pesos, thresholds,
-contrato y limitaciones en [análisis BEC](docs/bec-analysis.md).
+Solo procesa development. La evaluación determinista del holdout está documentada
+en [evaluación](docs/evaluation.md); no ajustar reglas, pesos, thresholds,
+similitud, prompts ni dataset con esos resultados. Ver [análisis BEC](docs/bec-analysis.md).
 
 ## Desarrollo de aplicaciones en el host
 
@@ -365,8 +371,9 @@ backend/
     core/          # Settings y SQLAlchemy
     models/        # Base y entidades persistentes, incluido Email
     schemas/       # Contratos HTTP separados
-    services/      # Auth, auditoría, contexto, ingestión, MIME, dataset y motor BEC
-    scripts/       # CLI create_admin, validate_dataset y check_development
+    services/      # Dominio, motor BEC y reportes operativos
+    evaluation/    # Evaluador académico local; no forma parte de la API productiva
+    scripts/       # CLI create_admin, validadores, regresión y evaluación explícita
     main.py
   tests/
   migrations/      # Alembic: env.py, plantilla y versions/
@@ -375,7 +382,7 @@ backend/
   pyproject.toml
   uv.lock
 frontend/
-  src/             # Pantalla mínima y consulta /health
+  src/             # Aplicación autenticada, alertas, operaciones y reportes
   Dockerfile
   package.json
   package-lock.json
@@ -389,12 +396,19 @@ docker-compose.yml
 README.md
 ```
 
-## Pendiente tras Fase 7
+## Reportes operativos
+
+ADMIN, MANAGER y AUDITOR pueden descargar un reporte operativo PDF o Excel desde
+`/reports`, con fechas UTC opcionales. Los archivos se generan en memoria desde
+PostgreSQL; incluyen agregados y una lista de alertas sin cuerpo del email ni
+referencias bancarias. ANALYST no tiene acceso. Ver [alcance y privacidad](docs/reporting.md).
+
+## Pendiente tras Fase 8
 
 Fase 6 añade BECAlert automática, lectura de alertas, API key acotada y workflow
 Webhook n8n. Fase 7 añade frontend funcional e HITL. Quedan pendientes CRUD de usuarios,
 recuperación, refresh tokens, conectores de email y notificaciones.
-También quedan fuera reportes, Gmail, IMAP y Microsoft Graph.
+También quedan fuera Gmail, IMAP y Microsoft Graph.
 
 Las APIs de contexto ofrecen GET/POST/PATCH; ADMIN/MANAGER escriben. Emails ofrecen
 POST/GET, con ingestión también para ANALYST. Todos los roles leen; no hay DELETE.
